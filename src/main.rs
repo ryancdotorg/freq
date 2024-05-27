@@ -177,21 +177,30 @@ fn main() {
 
     let mut parts = Vec::<Box<dyn Fn(usize, usize, usize, usize) -> String>>::new();
 
-    if cli.number  { parts.push(f_idx); }
+    if cli.number {
+        parts.push(f_idx);
+    }
     parts.push(f_cnt);
-    if cli.percent { parts.push(f_pct); }
-    if cli.cdf     { parts.push(f_cdf); }
+    if cli.percent {
+        parts.push(f_pct);
+    }
+    if cli.cdf {
+        parts.push(f_cdf);
+    }
 
     // formatter
     let f: Box<dyn Fn(usize, usize, usize, usize, String) -> String> = if cli.tab {
-        Box::new(move |i, c, a, t, v| format!(
-            "{}\t{}",
-            parts.iter()
-                .map(|f| f(i, c, a, t))
-                .collect::<Vec<String>>()
-                .join("\t"),
-            v,
-        ))
+        Box::new(move |i, c, a, t, v| {
+            format!(
+                "{}\t{}",
+                parts
+                    .iter()
+                    .map(|f| f(i, c, a, t))
+                    .collect::<Vec<String>>()
+                    .join("\t"),
+                v,
+            )
+        })
     } else if cli.csv {
         Box::new(move |i, c, a, t, v| {
             let esc = v
@@ -201,7 +210,8 @@ fn main() {
 
             format!(
                 "{},\"{}\"",
-                parts.iter()
+                parts
+                    .iter()
                     .map(|f| f(i, c, a, t))
                     .collect::<Vec<String>>()
                     .join(","),
@@ -209,14 +219,17 @@ fn main() {
             )
         })
     } else {
-        Box::new(move |i, c, a, t, v| format!(
-            "{}  {}",
-            parts.iter()
-                .map(|f| f(i, c, a, t))
-                .collect::<Vec<String>>()
-                .join(""),
-            v,
-        ))
+        Box::new(move |i, c, a, t, v| {
+            format!(
+                "{}  {}",
+                parts
+                    .iter()
+                    .map(|f| f(i, c, a, t))
+                    .collect::<Vec<String>>()
+                    .join(""),
+                v,
+            )
+        })
     };
 
     for (index, count, value) in items
