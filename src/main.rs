@@ -3,7 +3,8 @@ mod input;
 use input::Input;
 
 // stdlib
-use std::io::BufRead;
+use std::cmp::max;
+use std::io::{self, BufRead, Write};
 use std::process::exit;
 
 // packages
@@ -11,24 +12,29 @@ use clap::Parser;
 use counter::Counter;
 
 #[derive(Debug, Parser)]
+#[command(name = env!("CARGO_PKG_NAME"))]
+#[command(version, author, about, long_about = None)]
 struct Cli {
-    #[arg(short, help = "Number lines")]
-    number: bool,
-
-    #[arg(short, help = "Show percent")]
-    percent: bool,
-
-    #[arg(short, help = "Show CDF")]
-    cdf: bool,
-
     #[arg(short, value_parser = 0..=8, default_value = "3", help = "Digits of precision")]
     digits: i64,
 
-    #[arg(short = 'T', conflicts_with = "csv", help = "Tab-delimited output")]
-    tab: bool,
+    #[arg(short, help = "Limit output to top N values")]
+    limit: Option<usize>,
 
-    #[arg(short = 'C', conflicts_with = "tab", help = "CSV output")]
+    #[arg(short, long, help = "Number lines")]
+    number: bool,
+
+    #[arg(short, long, conflicts_with = "csv", help = "Tab delimited output")]
+    tsv: bool,
+
+    #[arg(short, long, conflicts_with = "tsv", help = "Comma seperated output")]
     csv: bool,
+
+    #[arg(short = 'P', long, help = "Don't show percent")]
+    no_pct: bool,
+
+    #[arg(short = 'C', long, help = "Don't show CDF")]
+    no_cdf: bool,
 
     files: Vec<String>,
 
@@ -42,10 +48,6 @@ fn n_width(n: usize) -> usize {
         _ => (n.ilog10() + 1).try_into().unwrap(),
     }
 }
-
-// let (cdf_whole, cdf_frac) = pf_div(accumulated, p_mod, total);
-// index, count, accumulated, total
-//"{:w1$}  {:w2$} {:3}.{:0>w3$} {:3}.{:0>w3$}  {}",
 
 fn mk_fmt_pct(digits: usize, lpad: bool) -> Box<dyn Fn(usize, usize) -> String> {
     let p_mod = 10_usize.pow(digits.try_into().unwrap());
@@ -107,8 +109,6 @@ fn pw_div(n: usize, div: usize) -> usize {
     ((n * 1000) / div + 5) / 10
 }
 
-#[inline(always)]
-
 fn main() {
     let cli = Cli::parse();
 
@@ -160,85 +160,70 @@ fn main() {
         b_count.cmp(a_count).then_with(|| a_value.cmp(b_value))
     });
 
+    if items.len() == 0 {
+        exit(0);
+    }
+
     let mut accumulated = 0;
     let most = items[0].1;
 
     let digits = usize::try_from(cli.digits).unwrap();
-
-    // n_width(distinct)
-    // n_width(most)
-
-    let lpad = !(cli.tab || cli.csv);
-
-    let f_idx = mk_idx(1 + n_width(distinct), lpad);
-    let f_cnt = mk_cnt(1 + n_width(most), lpad);
-    let f_pct = mk_pct(digits, lpad);
-    let f_cdf = mk_cdf(digits, lpad);
+    let lpad = !(cli.tsv || cli.csv);
 
     let mut parts = Vec::<Box<dyn Fn(usize, usize, usize, usize) -> String>>::new();
 
+    // number lines
     if cli.number {
-        parts.push(f_idx);
-    }
-    parts.push(f_cnt);
-    if cli.percent {
-        parts.push(f_pct);
-    }
-    if cli.cdf {
-        parts.push(f_cdf);
+        parts.push(mk_idx(max(6, 1 + n_width(distinct)), lpad));
     }
 
-    // formatter
-    let f: Box<dyn Fn(usize, usize, usize, usize, String) -> String> = if cli.tab {
-        Box::new(move |i, c, a, t, v| {
-            format!(
-                "{}\t{}",
-                parts
-                    .iter()
-                    .map(|f| f(i, c, a, t))
-                    .collect::<Vec<String>>()
-                    .join("\t"),
-                v,
-            )
-        })
-    } else if cli.csv {
+    parts.push(mk_cnt(max(7, 1 + n_width(most)), lpad));
+
+    // percent of total
+    if !cli.no_pct {
+        parts.push(mk_pct(digits, lpad));
+    }
+
+    // cumulative distribution function
+    if !cli.no_cdf {
+        parts.push(mk_cdf(digits, lpad));
+    }
+
+    // yay closures?
+    let format_parts =
+        move |i, c, a, t| parts.iter().map(|f| f(i, c, a, t)).collect::<Vec<String>>();
+
+    // formatter (closures are, like, four layers deep at this point...)
+    let f: Box<dyn Fn(usize, usize, usize, usize, String) -> String> = if cli.csv {
+        // comma seperated
         Box::new(move |i, c, a, t, v| {
             let esc = v
                 .replace("\\", "\\\\")
                 .replace(",", "\\,")
                 .replace("\"", "\\\"");
 
-            format!(
-                "{},\"{}\"",
-                parts
-                    .iter()
-                    .map(|f| f(i, c, a, t))
-                    .collect::<Vec<String>>()
-                    .join(","),
-                esc,
-            )
+            format!("{},\"{}\"", format_parts(i, c, a, t).join(","), esc)
         })
+    } else if cli.tsv {
+        // tab delimited
+        Box::new(move |i, c, a, t, v| format!("{}\t{}", format_parts(i, c, a, t).join("\t"), v))
     } else {
-        Box::new(move |i, c, a, t, v| {
-            format!(
-                "{}  {}",
-                parts
-                    .iter()
-                    .map(|f| f(i, c, a, t))
-                    .collect::<Vec<String>>()
-                    .join(""),
-                v,
-            )
-        })
+        // standard
+        Box::new(move |i, c, a, t, v| format!("{}  {}", format_parts(i, c, a, t).join(""), v))
     };
+
+    let mut stdout = io::stdout();
+    let limit = cli.limit.unwrap_or(usize::MAX);
 
     for (index, count, value) in items
         .into_iter()
         .enumerate()
         .map(|(i, (v, c))| (i + 1, c, v))
     {
+        if index > limit { break; }
+
         accumulated += count;
 
-        println!("{}", f(index, count, accumulated, total, value));
+        let _ = writeln!(stdout, "{}", f(index, count, accumulated, total, value));
     }
 }
