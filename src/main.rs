@@ -2,6 +2,9 @@
 mod input;
 use input::Input;
 
+mod egg;
+use egg::egg;
+
 // stdlib
 use std::cmp::max;
 use std::io::{self, BufRead, Write};
@@ -124,6 +127,7 @@ fn main() {
             .map(|(f, input)| {
                 if input.is_err() {
                     let e = input.err().unwrap();
+                    if f == "out" { egg(); }
                     eprintln!("Error opening `{}`: {}", f, e);
                     exit(1);
                 }
