@@ -1,41 +1,68 @@
 use std::collections::HashMap;
 
-fn build_lut(lengths: &[u8], symbols: &[u8]) -> HashMap<i32, u8> {
-    let mut codes = HashMap::new();
-    let mut n = 0;
-    let mut idx = 0;
-    let mut last = 0;
-    let mut code = -1;
-
-    for x in lengths.iter().map(|it| *it as usize) {
-        n += 1;
-        if x > 0 {
-            code = (code + 1) * (1i32 << (n - last));
-            last = n;
-            for i in 0..x {
-                if i > 0 { code += 1; }
-                let key = code + (1i32 << n);
-                let symbol = symbols[idx];
-                codes.insert(key, symbol);
-                idx += 1;
-            }
-        }
-    }
-
-    return codes;
+struct Decoder {
+    codebook: HashMap<u32, u8>,
+    encoded: Vec<u8>,
+    byte_pos: usize,
+    bit_pos: usize,
 }
 
-fn output_symbol(symbol: u8, colors: &[(u8, u8, u8)], chars: &[u16]) {
-    let first_char = (colors.len() * 2) as u8;
-    if symbol < first_char {
-        let attr = if (symbol & 1) == 1 { 38 } else { 48 };
-        let (r, g, b) = colors[(symbol >> 1) as usize];
-        print!("\x1b[{};2;{};{};{}m", attr, r, g, b);
-    } else if symbol == 254 {
-        print!("\x1b[0m\n");
-    } else {
-        let cc = chars[(symbol - first_char) as usize];
-        print!("{}", char::from_u32(cc.into()).unwrap());
+impl Decoder {
+    fn new(lengths: &[u8], symbols: &[u8], encoded: &[u8]) -> Self {
+        let mut codebook = HashMap::new();
+        let mut sym_iter = symbols.iter();
+
+        let mut bits = 0;
+        let mut last = 0;
+        let mut code = 0;
+
+        for count in lengths.iter().map(|it| *it as usize) {
+            bits += 1;
+            if count > 0 {
+                code <<= bits - last;
+                last = bits;
+                for _ in 0..count {
+                    let key = code + (1 << bits);
+                    codebook.insert(key, *sym_iter.next().unwrap());
+                    code += 1;
+                }
+            }
+        }
+
+        Decoder {
+            codebook,
+            encoded: encoded.to_vec(),
+            byte_pos: 0, bit_pos: 0,
+        }
+    }
+}
+
+impl Iterator for Decoder {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut code = 1;
+        loop {
+            let b = (self.encoded[self.byte_pos] >> (7 - self.bit_pos)) & 1;
+            code = (code << 1) + (b as u32);
+            let res = self.codebook.get(&code);
+
+            if self.bit_pos == 7 {
+                self.byte_pos += 1;
+                self.bit_pos = 0;
+            } else {
+                self.bit_pos += 1;
+            }
+
+            if res.is_some() {
+                let symbol = *res.unwrap();
+                return if symbol == 255 {
+                    None
+                } else {
+                    Some(symbol)
+                }
+            }
+        }
     }
 }
 
@@ -85,7 +112,7 @@ pub fn egg() {
         195, 209, 212, 214, 224, 249, 228, 255,
     ];
 
-    let compressed: &[u8] = &[
+    let encoded: &[u8] = &[
         185, 140, 201, 238, 99, 30, 57, 217, 142, 120, 241, 143, 30, 51, 49, 143, 115, 27, 224,
         185, 140, 123, 150, 99, 198, 60, 120, 199, 142, 123, 152, 197, 143, 27, 50, 230, 49, 163,
         236, 25, 142, 212, 120, 217, 241, 227, 31, 99, 176, 62, 198, 51, 49, 227, 51, 30, 51, 49,
@@ -293,25 +320,20 @@ pub fn egg() {
         0, 131, 123, 71, 255, 224,
     ];
 
-    let lut = build_lut(lengths, symbols);
-    let mut pos = 0;
-    let mut bit = 0;
-    let mut code = 1;
-    loop {
-        let b = (compressed[pos] >> (7 - bit)) & 1;
-        code = (code << 1) + (b as i32);
-        let res = lut.get(&code);
-        if res.is_some() {
-            let symbol = *res.unwrap();
-            if symbol == 255 { break; }
-            output_symbol(symbol, colors, chars);
-            code = 1;
-        }
+    let first_char = (colors.len() * 2) as u8;
 
-        bit += 1;
-        if bit == 8 {
-            bit = 0;
-            pos += 1;
+    let decoder = Decoder::new(lengths, symbols, encoded);
+
+    for symbol in decoder {
+        if symbol < first_char {
+            let attr = if (symbol & 1) == 1 { 38 } else { 48 };
+            let (r, g, b) = colors[(symbol >> 1) as usize];
+            print!("\x1b[{};2;{};{};{}m", attr, r, g, b);
+        } else if symbol == 254 {
+            print!("\x1b[0m\n");
+        } else {
+            let cc = chars[(symbol - first_char) as usize];
+            print!("{}", char::from_u32(cc.into()).unwrap());
         }
     }
 }
