@@ -27,6 +27,9 @@ struct Cli {
     #[arg(short, long, help = "Number lines")]
     number: bool,
 
+    #[arg(short = 'U', long, help = "Just output unique lines")]
+    uniq: bool,
+
     #[arg(short, long, conflicts_with = "csv", help = "Tab delimited output")]
     tsv: bool,
 
@@ -198,7 +201,9 @@ fn main() {
         move |i, c, a, t| parts.iter().map(|f| f(i, c, a, t)).collect::<Vec<String>>();
 
     // formatter (closures are, like, four layers deep at this point...)
-    let f: Box<dyn Fn(usize, usize, usize, usize, String) -> String> = if cli.csv {
+    let f: Box<dyn Fn(usize, usize, usize, usize, String) -> String> = if cli.uniq {
+        Box::new(move |_i, _c, _a, _t, v| format!("{}", v))
+    } else if cli.csv {
         // comma seperated
         Box::new(move |i, c, a, t, v| {
             let esc = v
