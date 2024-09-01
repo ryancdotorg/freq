@@ -11,12 +11,43 @@ use std::io::{self, BufRead, Write};
 use std::process::exit;
 
 // packages
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use counter::Counter;
+
+build_info::build_info!(fn binfo);
+
+fn get_long_version() -> &'static str {
+    let info = binfo();
+    let mut parts = Vec::<String>::new();
+    parts.push("v".to_string());
+    parts.push(info.crate_info.version.to_string());
+
+    if let Some(vc) = &info.version_control {
+        if let Some(git) = &vc.git() {
+            parts.push("+".to_string());
+            if let Some(branch) = &git.branch {
+                parts.push(format!("{}.", branch));
+            }
+            parts.push(git.commit_short_id.to_string());
+            if git.dirty {
+                parts.push("-dirty".to_string());
+            }
+        }
+    }
+
+    parts.push(build_info::format!(
+        "\nBuilt at {} with {}",
+        $.timestamp,
+        $.compiler,
+    ).to_string());
+
+    Box::leak(parts.join("").into_boxed_str())
+}
 
 #[derive(Debug, Parser)]
 #[command(name = env!("CARGO_PKG_NAME"))]
-#[command(version, author, about, long_about = None)]
+#[command(version = build_info::format!("v{}", $.crate_info.version))]
+#[command(author, about, long_about = None)]
 struct Cli {
     #[arg(short, value_parser = 0..=8, default_value = "3", help = "Digits of precision")]
     digits: i64,
@@ -116,7 +147,11 @@ fn pw_div(n: usize, div: usize) -> usize {
 }
 
 fn main() {
-    let cli = Cli::parse();
+    let command = Cli::command();
+    let cli = Cli::from_arg_matches(&command
+                                   .long_version(get_long_version())
+                                   .get_matches()
+                                   ).unwrap();
 
     // open the input files, triggering i/o errors
     let inputs: Vec<Input> = if cli.files.len() + cli.files_raw.len() > 0 {
@@ -128,8 +163,7 @@ fn main() {
             })
             .chain(cli.files_raw.iter().map(|f| (f, Input::path(f))))
             .map(|(f, input)| {
-                if input.is_err() {
-                    let e = input.err().unwrap();
+                if let Err(e) = input {
                     if f == "out" { egg(); }
                     eprintln!("Error opening `{}`: {}", f, e);
                     exit(1);
@@ -147,8 +181,7 @@ fn main() {
         .flat_map(|i| {
             let label = i.get_label();
             i.lines().enumerate().filter_map(move |(index, line)| {
-                if line.is_err() {
-                    let e = line.err().unwrap();
+                if let Err(e) = line {
                     eprintln!("{}:{}:Error({}): {}", label, index, e.kind(), e,);
                     None
                 } else {
