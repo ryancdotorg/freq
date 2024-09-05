@@ -1,6 +1,6 @@
 [package]
 name = "freq"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Ryan Castellucci <code@ryanc.org>"]
 edition = "2021"
 resolver = "2"
@@ -18,6 +18,11 @@ build-info-build = "0"
 [features]
 default = ["egg"]
 egg = []
+
+[[bin]]
+name = "freq"
+test = false
+bench = false
 
 [profile.lto]
 inherits = "release"
