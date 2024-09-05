@@ -1,6 +1,6 @@
 [package]
 name = "freq"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Ryan Castellucci <code@ryanc.org>"]
 edition = "2021"
 resolver = "2"
@@ -9,10 +9,15 @@ resolver = "2"
 clap = { version = "4", features = ["derive"] }
 counter = { version = "0.5" }
 build-info = "0"
+semver = "1"
 
 [build-dependencies]
 build-info = "0"
 build-info-build = "0"
+
+[features]
+default = ["egg"]
+egg = []
 
 [profile.lto]
 inherits = "release"

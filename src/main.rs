@@ -2,7 +2,9 @@
 mod input;
 use input::Input;
 
+#[cfg(feature = "egg")]
 mod egg;
+#[cfg(feature = "egg")]
 use egg::egg;
 
 // stdlib
@@ -13,6 +15,9 @@ use std::process::exit;
 // packages
 use clap::{CommandFactory, FromArgMatches, Parser};
 use counter::Counter;
+use semver::{Version, VersionReq};
+
+include!(concat!(env!("OUT_DIR"),"/build_features.rs"));
 
 build_info::build_info!(fn binfo);
 
@@ -35,6 +40,13 @@ fn get_long_version() -> &'static str {
         }
     }
 
+    if FEATURES.len() > 0 {
+        parts.push(format!(
+            "\nFeatures: {}",
+            FEATURES.join(" "),
+        ));
+    }
+
     parts.push(build_info::format!(
         "\nBuilt at {} with {}",
         $.timestamp,
@@ -49,11 +61,14 @@ fn get_long_version() -> &'static str {
 #[command(version = build_info::format!("v{}", $.crate_info.version))]
 #[command(author, about, long_about = None)]
 struct Cli {
-    #[arg(short, value_parser = 0..=8, default_value = "3", help = "Digits of precision")]
+    #[arg(short, value_parser = 0..=8, default_value = "3", value_name = "N", help = "Digits of precision")]
     digits: i64,
 
-    #[arg(short, help = "Limit output to top N values")]
+    #[arg(short, value_name = "N", help = "Limit output to top N values")]
     limit: Option<usize>,
+
+    #[arg(short, long, help = "Return least common values first")]
+    reverse: bool,
 
     #[arg(short, long, help = "Number lines")]
     number: bool,
@@ -72,6 +87,9 @@ struct Cli {
 
     #[arg(short = 'C', long, help = "Don't show CDF")]
     no_cdf: bool,
+
+    #[arg(long, display_order = 1000, value_name = "RANGE", help = "Check version and exit")]
+    semver: Option<String>,
 
     files: Vec<String>,
 
@@ -155,6 +173,15 @@ fn main() {
         .get_matches()
     ).unwrap();
 
+    if let Some(semver) = cli.semver {
+        if let Ok(req) = VersionReq::parse(&semver) {
+            let ver = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+            exit(if req.matches(&ver) { 0 } else { 1 });
+        } else {
+            exit(255);
+        }
+    }
+
     // open input files, triggering i/o errors
     let inputs: Vec<_> = cli.files.into_iter()
         .map(|f| if f == "-" { None } else { Some(f) })
@@ -163,6 +190,7 @@ fn main() {
             Some(f) => match Input::path(&f) {
                 Ok(input) => input,
                 Err(e) => {
+                    #[cfg(feature = "egg")]
                     if f == "out" { egg(); }
                     eprintln!("Error opening `{}`: {}", f, e);
                     exit(1);
@@ -199,9 +227,15 @@ fn main() {
 
     // drain/collect instead of Counter::most_common_ordered saves memory
     let mut items = counter.drain().collect::<Vec<_>>();
-    items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
-        b_count.cmp(a_count).then_with(|| a_value.cmp(b_value))
-    });
+    if cli.reverse {
+        items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
+            a_count.cmp(b_count).then_with(|| b_value.cmp(a_value))
+        });
+    } else {
+        items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
+            b_count.cmp(a_count).then_with(|| a_value.cmp(b_value))
+        });
+    }
 
     if items.len() == 0 {
         exit(0);
