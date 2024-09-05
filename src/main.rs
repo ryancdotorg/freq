@@ -75,6 +75,7 @@ struct Cli {
 
     files: Vec<String>,
 
+    // files coming after `--`
     #[arg(last = true, allow_hyphen_values = true, hide = true)]
     files_raw: Vec<String>,
 }
@@ -148,31 +149,33 @@ fn pw_div(n: usize, div: usize) -> usize {
 
 fn main() {
     let command = Cli::command();
-    let cli = Cli::from_arg_matches(&command
-                                   .long_version(get_long_version())
-                                   .get_matches()
-                                   ).unwrap();
+    let cli = Cli::from_arg_matches(
+        &command
+        .long_version(get_long_version())
+        .get_matches()
+    ).unwrap();
 
-    // open the input files, triggering i/o errors
-    let inputs: Vec<Input> = if cli.files.len() + cli.files_raw.len() > 0 {
-        cli.files
-            .iter()
-            .map(|f| match f.as_str() {
-                "-" => (f, Input::stdin()),
-                _ => (f, Input::path(f)),
-            })
-            .chain(cli.files_raw.iter().map(|f| (f, Input::path(f))))
-            .map(|(f, input)| {
-                if let Err(e) = input {
+    // open input files, triggering i/o errors
+    let inputs: Vec<_> = cli.files.into_iter()
+        .map(|f| if f == "-" { None } else { Some(f) })
+        .chain(cli.files_raw.into_iter().map(|f| Some(f)))
+        .map(|f| match f {
+            Some(f) => match Input::path(&f) {
+                Ok(input) => input,
+                Err(e) => {
                     if f == "out" { egg(); }
                     eprintln!("Error opening `{}`: {}", f, e);
                     exit(1);
-                }
-                input.unwrap()
-            })
-            .collect()
-    } else {
+                },
+            },
+            None => Input::stdin().unwrap(),
+        })
+        .collect();
+
+    let inputs = if inputs.len() == 0 {
         vec![Input::stdin().unwrap()]
+    } else {
+        inputs
     };
 
     // run the counter over the lines
