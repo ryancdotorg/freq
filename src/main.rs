@@ -70,11 +70,11 @@ struct Cli {
     #[arg(short, long, help = "Return least common values first")]
     reverse: bool,
 
-    #[arg(short, long, help = "Number lines")]
-    number: bool,
-
     #[arg(short = 'U', long, help = "Just output unique lines")]
     uniq: bool,
+
+    #[arg(short, long, help = "Number lines")]
+    number: bool,
 
     #[arg(short = 'R', long, help = "Show running total")]
     running: bool,
