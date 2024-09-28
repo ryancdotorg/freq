@@ -76,6 +76,9 @@ struct Cli {
     #[arg(short = 'U', long, help = "Just output unique lines")]
     uniq: bool,
 
+    #[arg(short = 'R', long, help = "Show running total")]
+    running: bool,
+
     #[arg(short, long, conflicts_with = "csv", help = "Tab delimited output")]
     tsv: bool,
 
@@ -134,22 +137,27 @@ fn mk_fmt_int(digits: usize, lpad: bool) -> Box<dyn Fn(usize) -> String> {
 
 fn mk_idx(digits: usize, lpad: bool) -> Box<dyn Fn(usize, usize, usize, usize) -> String> {
     let f = mk_fmt_int(digits, lpad);
-    Box::new(move |i, _c, _a, _t| f(i))
+    Box::new(move |i, _c, _r, _t| f(i))
 }
 
 fn mk_cnt(digits: usize, lpad: bool) -> Box<dyn Fn(usize, usize, usize, usize) -> String> {
     let f = mk_fmt_int(digits, lpad);
-    Box::new(move |_i, c, _a, _t| f(c))
+    Box::new(move |_i, c, _r, _t| f(c))
+}
+
+fn mk_run(digits: usize, lpad: bool) -> Box<dyn Fn(usize, usize, usize, usize) -> String> {
+    let f = mk_fmt_int(digits, lpad);
+    Box::new(move |_i, _c, r, _t| f(r))
 }
 
 fn mk_pct(digits: usize, lpad: bool) -> Box<dyn Fn(usize, usize, usize, usize) -> String> {
     let f = mk_fmt_pct(digits, lpad);
-    Box::new(move |_i, c, _a, t| f(c, t))
+    Box::new(move |_i, c, _r, t| f(c, t))
 }
 
 fn mk_cdf(digits: usize, lpad: bool) -> Box<dyn Fn(usize, usize, usize, usize) -> String> {
     let f = mk_fmt_pct(digits, lpad);
-    Box::new(move |_i, _c, a, t| f(a, t))
+    Box::new(move |_i, _c, r, t| f(r, t))
 }
 
 #[inline(always)]
@@ -241,7 +249,7 @@ fn main() {
         exit(0);
     }
 
-    let mut accumulated = 0;
+    let mut running_total = 0;
     let most = items[0].1;
 
     let digits = usize::try_from(cli.digits).unwrap();
@@ -256,6 +264,12 @@ fn main() {
 
     parts.push(mk_cnt(max(7, 1 + n_width(most)), lpad));
 
+    // running total
+    if cli.running {
+        let total = items.iter().fold(0, |accum, item| accum + item.1);
+        parts.push(mk_run(max(7, 1 + n_width(total)), lpad));
+    }
+
     // percent of total
     if !cli.no_pct {
         parts.push(mk_pct(digits, lpad));
@@ -268,27 +282,27 @@ fn main() {
 
     // yay closures?
     let format_parts =
-        move |i, c, a, t| parts.iter().map(|f| f(i, c, a, t)).collect::<Vec<String>>();
+        move |i, c, r, t| parts.iter().map(|f| f(i, c, r, t)).collect::<Vec<String>>();
 
     // formatter (closures are, like, four layers deep at this point...)
     let f: Box<dyn Fn(usize, usize, usize, usize, String) -> String> = if cli.uniq {
-        Box::new(move |_i, _c, _a, _t, v| format!("{}", v))
+        Box::new(move |_i, _c, _r, _t, v| format!("{}", v))
     } else if cli.csv {
         // comma seperated
-        Box::new(move |i, c, a, t, v| {
+        Box::new(move |i, c, r, t, v| {
             let esc = v
                 .replace("\\", "\\\\")
                 .replace(",", "\\,")
                 .replace("\"", "\\\"");
 
-            format!("{},\"{}\"", format_parts(i, c, a, t).join(","), esc)
+            format!("{},\"{}\"", format_parts(i, c, r, t).join(","), esc)
         })
     } else if cli.tsv {
         // tab delimited
-        Box::new(move |i, c, a, t, v| format!("{}\t{}", format_parts(i, c, a, t).join("\t"), v))
+        Box::new(move |i, c, r, t, v| format!("{}\t{}", format_parts(i, c, r, t).join("\t"), v))
     } else {
         // standard
-        Box::new(move |i, c, a, t, v| format!("{}  {}", format_parts(i, c, a, t).join(""), v))
+        Box::new(move |i, c, r, t, v| format!("{}  {}", format_parts(i, c, r, t).join(""), v))
     };
 
     let mut stdout = io::stdout();
@@ -301,8 +315,8 @@ fn main() {
     {
         if index > limit { break; }
 
-        accumulated += count;
+        running_total += count;
 
-        let _ = writeln!(stdout, "{}", f(index, count, accumulated, total, value));
+        let _ = writeln!(stdout, "{}", f(index, count, running_total, total, value));
     }
 }
