@@ -1,6 +1,6 @@
 [package]
 name = "freq"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Ryan Castellucci <code@ryanc.org>"]
 edition = "2021"
 resolver = "2"

@@ -67,6 +67,9 @@ struct Cli {
     #[arg(short, value_name = "N", help = "Limit output to top N values")]
     limit: Option<usize>,
 
+    #[arg(short, long, value_name = "N", default_value = "1", help = "Limit output to values seen at least N times")]
+    min: usize,
+
     #[arg(short, long, help = "Return least common values first")]
     reverse: bool,
 
@@ -316,6 +319,8 @@ fn main() {
         if index > limit { break; }
 
         running_total += count;
+
+        if count < cli.min { continue; }
 
         let _ = writeln!(stdout, "{}", f(index, count, running_total, total, value));
     }
