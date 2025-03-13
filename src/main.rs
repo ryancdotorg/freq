@@ -37,7 +37,22 @@ fn get_long_version() -> &'static str {
             if git.dirty {
                 parts.push("-dirty".to_string());
             }
+            parts.push(" (".to_string());
+            parts.push(info.target.triple.to_string());
+            parts.push(")".to_string());
         }
+    }
+
+    parts.push(build_info::format!(
+        "\nBuilt at {} with {}",
+        $.timestamp,
+        $.compiler,
+    ).to_string());
+
+    match info.crate_info.authors.len() {
+        0 => (),
+        1 => parts.push(format!("\nAuthor: {}", info.crate_info.authors[0])),
+        _ => parts.push(format!("\nAuthors: {}", info.crate_info.authors.join("; "))),
     }
 
     if FEATURES.len() > 0 {
@@ -46,12 +61,6 @@ fn get_long_version() -> &'static str {
             FEATURES.join(" "),
         ));
     }
-
-    parts.push(build_info::format!(
-        "\nBuilt at {} with {}",
-        $.timestamp,
-        $.compiler,
-    ).to_string());
 
     Box::leak(parts.join("").into_boxed_str())
 }

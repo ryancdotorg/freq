@@ -5,15 +5,20 @@ Arguments:
   [FILES]...
 
 Options:
-  -d <DIGITS>      Digits of precision [default: 3]
-  -l <LIMIT>       Limit output to top N values
-  -n, --number     Number lines
-  -t, --tsv        Tab delimited output
-  -c, --csv        Comma seperated output
-  -P, --no-pct     Don't show percent
-  -C, --no-cdf     Don't show CDF
-  -h, --help       Print help
-  -V, --version    Print version
+  -d <N>                Digits of precision [default: 3]
+  -l <N>                Limit output to top N values
+  -m, --min <N>         Limit output to values seen at least N times [default: 1]
+  -r, --reverse         Return least common values first
+  -U, --uniq            Just output unique lines
+  -n, --number          Number lines
+  -R, --running         Show running total
+  -t, --tsv             Tab delimited output
+  -c, --csv             Comma seperated output
+  -P, --no-pct          Don't show percent
+  -C, --no-cdf          Don't show CDF
+  -h, --help            Print help
+  -V, --version         Print version
+      --semver <RANGE>  Check version and exit
 ```
 
 ```
