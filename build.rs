@@ -14,9 +14,9 @@ fn main() {
 
     let features: Vec<_> = env::vars_os().filter_map(|(key, _)| {
         if let Ok(name) = std::str::from_utf8(&key.into_encoded_bytes()) {
-            if name.starts_with("CARGO_FEATURE_") {
-                if name != "CARGO_FEATURE_DEFAULT" {
-                    return Some(name[14..].to_string());
+            if let Some(name) = name.strip_prefix("CARGO_FEATURE_") {
+                if name != "DEFAULT" && name != "DECOMPRESS" && !name.starts_with("_") {
+                    return Some(name.to_string());
                 }
             }
         }

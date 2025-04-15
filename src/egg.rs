@@ -330,7 +330,7 @@ pub fn egg() {
             let (r, g, b) = colors[(symbol >> 1) as usize];
             print!("\x1b[{};2;{};{};{}m", attr, r, g, b);
         } else if symbol == 254 {
-            print!("\x1b[0m\n");
+            println!("\x1b[0m");
         } else {
             let cc = chars[(symbol - first_char) as usize];
             print!("{}", char::from_u32(cc.into()).unwrap());
