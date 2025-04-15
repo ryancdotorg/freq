@@ -55,7 +55,8 @@ fn get_long_version() -> &'static str {
         _ => parts.push(format!("\nAuthors: {}", info.crate_info.authors.join("; "))),
     }
 
-    if FEATURES.len() > 0 {
+    #[allow(clippy::const_is_empty)]
+    if !FEATURES.is_empty() {
         parts.push(format!(
             "\nFeatures: {}",
             FEATURES.join(" "),
@@ -205,7 +206,7 @@ fn main() {
     // open input files, triggering i/o errors
     let inputs: Vec<_> = cli.files.into_iter()
         .map(|f| if f == "-" { None } else { Some(f) })
-        .chain(cli.files_raw.into_iter().map(|f| Some(f)))
+        .chain(cli.files_raw.into_iter().map(Some))
         .map(|f| match f {
             Some(f) => match Input::path(&f) {
                 Ok(input) => input,
@@ -220,7 +221,7 @@ fn main() {
         })
         .collect();
 
-    let inputs = if inputs.len() == 0 {
+    let inputs = if inputs.is_empty() {
         vec![Input::stdin().unwrap()]
     } else {
         inputs
@@ -230,7 +231,7 @@ fn main() {
     let mut counter = inputs
         .into_iter()
         .flat_map(|i| {
-            let label = i.get_label();
+            let label = i.get_label().to_string();
             i.lines().enumerate().filter_map(move |(index, line)| {
                 if let Err(e) = line {
                     eprintln!("{}:{}:Error({}): {}", label, index, e.kind(), e,);
@@ -257,7 +258,7 @@ fn main() {
         });
     }
 
-    if items.len() == 0 {
+    if items.is_empty() {
         exit(0);
     }
 
@@ -298,7 +299,7 @@ fn main() {
 
     // formatter (closures are, like, four layers deep at this point...)
     let f: Box<dyn Fn(usize, usize, usize, usize, String) -> String> = if cli.uniq {
-        Box::new(move |_i, _c, _r, _t, v| format!("{}", v))
+        Box::new(move |_i, _c, _r, _t, v| v.to_string())
     } else if cli.csv {
         // comma seperated
         Box::new(move |i, c, r, t, v| {
