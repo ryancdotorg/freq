@@ -13,6 +13,7 @@ use orderedstring::OrderedString;
 // stdlib
 use std::cmp::max;
 use std::io::{self, BufRead, Write};
+use std::num::NonZeroUsize;
 use std::process::exit;
 
 // packages
@@ -76,29 +77,44 @@ fn get_long_version() -> &'static str {
 #[command(version = build_info::format!("v{}", $.crate_info.version))]
 #[command(author, about, long_about = None)]
 struct Cli {
-    #[arg(short, value_parser = 0..=8, default_value = "3", value_name = "N", help = "Digits of precision")]
+    #[arg(short, long, value_parser = 0..=8, default_value = "3", value_name = "N", help = "Digits of precision")]
     digits: i64,
 
-    #[arg(short, value_name = "N", help = "Limit output to top N values")]
+    #[arg(short, long, value_name = "N", help = "Limit output to top N values")]
     limit: Option<usize>,
 
-    #[arg(short, long, value_name = "N", default_value = "1", help = "Limit output to values seen at least N times")]
-    min: usize,
+    #[arg(short, long, value_name = "N", help = "Limit output to values seen at least N times")]
+    min: Option<usize>,
 
-    #[arg(short = 'S', long, help = "Use an unstable sort")]
-    no_stable: bool,
+    #[arg(short = 'x', long, value_name = "N", help = "Limit output to values seen at most N times")]
+    max: Option<NonZeroUsize>,
+
+    #[arg(short = 'I', long, conflicts_with = "lexigraphic", help = "Sort values with same frequency by original order (default)")]
+    insertion: bool,
+
+    #[arg(short = 'L', long, conflicts_with = "unstable", help = "Sort values with same frequency lexicographically")]
+    lexigraphic: bool,
+
+    #[arg(short = 'U', long, conflicts_with = "insertion", help = "Do not sort values with same frequency")]
+    unstable: bool,
 
     #[arg(short, long, help = "Output least common values first")]
     reverse: bool,
 
-    #[arg(short = 'U', long, help = "Output unique lines with no additional data")]
+    #[arg(short = 'u', long, help = "Output unique values with no additional data")]
     uniq: bool,
 
-    #[arg(short, long, help = "Number lines")]
+    #[arg(short, long, help = "Include line numbers")]
     number: bool,
 
-    #[arg(short = 'R', long, help = "Show running total")]
+    #[arg(short = 'R', long, help = "Include running total")]
     running: bool,
+
+    #[arg(short = 'P', long, help = "Omit percent column")]
+    no_pct: bool,
+
+    #[arg(short = 'C', long, help = "Omit CDF column")]
+    no_cdf: bool,
 
     #[arg(short, long, conflicts_with = "csv", help = "Tab delimited output")]
     tsv: bool,
@@ -106,11 +122,6 @@ struct Cli {
     #[arg(short, long, conflicts_with = "tsv", help = "Comma seperated output")]
     csv: bool,
 
-    #[arg(short = 'P', long, help = "Don't show percent")]
-    no_pct: bool,
-
-    #[arg(short = 'C', long, help = "Don't show CDF")]
-    no_cdf: bool,
 
     #[arg(long, display_order = 1000, value_name = "RANGE", help = "Check version and exit")]
     semver: Option<String>,
@@ -195,9 +206,8 @@ fn pw_div(n: usize, div: usize) -> usize {
 }
 
 fn main() {
-    let command = Cli::command();
     let cli = Cli::from_arg_matches(
-        &command
+        &Cli::command()
         .long_version(get_long_version())
         .get_matches()
     ).unwrap();
@@ -208,6 +218,15 @@ fn main() {
             exit(if req.matches(&ver) { 0 } else { 1 });
         } else {
             exit(255);
+        }
+    }
+
+    if let Some((min, max)) = cli.min.zip(cli.max) {
+        if usize::from(max) < min {
+            Cli::command().error(
+                clap::error::ErrorKind::ArgumentConflict,
+                "`max` can't be less than `min`",
+            ).exit();
         }
     }
 
@@ -255,29 +274,32 @@ fn main() {
     let distinct = counter.len();
     let total = counter.total::<usize>();
 
+    // sort ascending or descending depending on `reverse`
+    let cmp = if cli.reverse {
+        |a: &usize, b: &usize| a.cmp(b)
+    } else {
+        |a: &usize, b: &usize| b.cmp(a)
+    };
+
     // drain/collect instead of Counter::most_common_ordered saves memory
     let mut items = counter.drain().collect::<Vec<_>>();
-    if cli.reverse {
-        if cli.no_stable {
-            items.sort_unstable_by(|(_, a_count), (_, b_count)| {
-                a_count.cmp(b_count)
-            });
-        } else {
-            items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
-                // still sorts by insertion order
-                a_count.cmp(b_count).then_with(|| a_value.cmp(b_value))
-            });
-        }
+
+    // sort according to options
+    if cli.unstable {
+        items.sort_unstable_by(|(_, a_count), (_, b_count)| {
+            // sort by frequency
+            cmp(a_count, b_count)
+        });
+    } else if cli.lexigraphic {
+        items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
+            // sort by frequency, then lexicographically
+            cmp(a_count, b_count).then_with(|| a_value.as_ref().cmp(b_value.as_ref()))
+        });
     } else {
-        if cli.no_stable {
-            items.sort_unstable_by(|(_, a_count), (_, b_count)| {
-                b_count.cmp(a_count)
-            });
-        } else {
-            items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
-                b_count.cmp(a_count).then_with(|| a_value.cmp(b_value))
-            });
-        }
+        items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
+            // sort ascending by frequency, then by insertion order
+            cmp(a_count, b_count).then_with(|| a_value.cmp(b_value))
+        });
     }
 
     if items.is_empty() {
@@ -352,7 +374,17 @@ fn main() {
 
         running_total += count;
 
-        if count < cli.min { continue; }
+        if let Some(min) = cli.min {
+            if count < min {
+                continue;
+            }
+        }
+
+        if let Some(max) = cli.max {
+            if count > max.into() {
+                continue;
+            }
+        }
 
         let _ = writeln!(stdout, "{}", f(index, count, running_total, total, value.into()));
     }

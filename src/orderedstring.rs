@@ -23,9 +23,15 @@ impl<'a, T> From<&'a OrderedString<T>> for &'a str {
 }
 
 impl<T> Deref for OrderedString<T> {
-    type Target = String;
+    type Target = str;
 
     fn deref(&self) -> &Self::Target {
+        &self.1
+    }
+}
+
+impl<T> AsRef<str> for OrderedString<T> {
+    fn as_ref(&self) -> &str {
         &self.1
     }
 }
