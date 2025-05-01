@@ -12,6 +12,11 @@ fn main() {
     let file = File::create(&dest_path).unwrap();
     let mut writer = BufWriter::new(file);
 
+    writer.write_all(format!(
+        "const PROFILE: &str = {:?};\n",
+        env::var_os("PROFILE").unwrap(),
+    ).as_bytes()).unwrap();
+
     let features: Vec<_> = env::vars_os().filter_map(|(key, _)| {
         if let Ok(name) = std::str::from_utf8(&key.into_encoded_bytes()) {
             if let Some(name) = name.strip_prefix("CARGO_FEATURE_") {

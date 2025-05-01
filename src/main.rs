@@ -7,6 +7,9 @@ mod egg;
 #[cfg(feature = "egg")]
 use egg::egg;
 
+mod orderedstring;
+use orderedstring::OrderedString;
+
 // stdlib
 use std::cmp::max;
 use std::io::{self, BufRead, Write};
@@ -39,6 +42,8 @@ fn get_long_version() -> &'static str {
             }
             parts.push(" (".to_string());
             parts.push(info.target.triple.to_string());
+            parts.push(", ".to_string());
+            parts.push(PROFILE.to_string());
             parts.push(")".to_string());
         }
     }
@@ -80,10 +85,13 @@ struct Cli {
     #[arg(short, long, value_name = "N", default_value = "1", help = "Limit output to values seen at least N times")]
     min: usize,
 
-    #[arg(short, long, help = "Return least common values first")]
+    #[arg(short = 'S', long, help = "Use an unstable sort")]
+    no_stable: bool,
+
+    #[arg(short, long, help = "Output least common values first")]
     reverse: bool,
 
-    #[arg(short = 'U', long, help = "Just output unique lines")]
+    #[arg(short = 'U', long, help = "Output unique lines with no additional data")]
     uniq: bool,
 
     #[arg(short, long, help = "Number lines")]
@@ -237,7 +245,8 @@ fn main() {
                     eprintln!("{}:{}:Error({}): {}", label, index, e.kind(), e,);
                     None
                 } else {
-                    line.ok()
+                    // track the order in which values were seen
+                    line.map_or(None, |s| Some(OrderedString::new(index, s)))
                 }
             })
         })
@@ -249,13 +258,26 @@ fn main() {
     // drain/collect instead of Counter::most_common_ordered saves memory
     let mut items = counter.drain().collect::<Vec<_>>();
     if cli.reverse {
-        items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
-            a_count.cmp(b_count).then_with(|| b_value.cmp(a_value))
-        });
+        if cli.no_stable {
+            items.sort_unstable_by(|(_, a_count), (_, b_count)| {
+                a_count.cmp(b_count)
+            });
+        } else {
+            items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
+                // still sorts by insertion order
+                a_count.cmp(b_count).then_with(|| a_value.cmp(b_value))
+            });
+        }
     } else {
-        items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
-            b_count.cmp(a_count).then_with(|| a_value.cmp(b_value))
-        });
+        if cli.no_stable {
+            items.sort_unstable_by(|(_, a_count), (_, b_count)| {
+                b_count.cmp(a_count)
+            });
+        } else {
+            items.sort_unstable_by(|(a_value, a_count), (b_value, b_count)| {
+                b_count.cmp(a_count).then_with(|| a_value.cmp(b_value))
+            });
+        }
     }
 
     if items.is_empty() {
@@ -332,6 +354,6 @@ fn main() {
 
         if count < cli.min { continue; }
 
-        let _ = writeln!(stdout, "{}", f(index, count, running_total, total, value));
+        let _ = writeln!(stdout, "{}", f(index, count, running_total, total, value.into()));
     }
 }
