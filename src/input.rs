@@ -13,6 +13,11 @@ use flate2::bufread::MultiGzDecoder;
 #[cfg(feature = "ungz")]
 const GZIP_MAGIC:  [u8; 3] = [0x1f, 0x8b, 0x08];
 
+#[cfg(feature = "unlz4")]
+use lz4_flex::frame::FrameDecoder;
+#[cfg(feature = "unlz4")]
+const LZ4_MAGIC: [u8; 4] = [0x04, 0x22, 0x4d, 0x18];
+
 #[cfg(feature = "unxz")]
 use xz2::read::XzDecoder;
 #[cfg(feature = "unxz")]
@@ -24,8 +29,9 @@ use zstd::stream::read::Decoder as ZstdDecoder;
 const ZSTD_MAGIC:  [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
 
 pub struct Input<'a> {
-    pub label: String,
     inner: Box<dyn BufRead + 'a>,
+    pub label: String,
+    pub format: Option<&'static str>,
 }
 
 impl<'a> Input<'a> {
@@ -47,8 +53,8 @@ impl<'a> Input<'a> {
     }
 
     #[cfg(feature = "_any_decompress")]
-    fn with_buffer<R: Read + 'a, T: Display>(read: R, label: T) -> io::Result<Input<'a>> {
-        Ok(Input { label: label.to_string(), inner: Box::new(BufReader::new(read)), })
+    fn with_buffer<R: Read + 'a, T: Display>(read: R, label: T, format: &'static str) -> io::Result<Input<'a>> {
+        Ok(Input { inner: Box::new(BufReader::new(read)), label: label.to_string(), format: Some(format) })
     }
 
     #[cfg(feature = "_any_decompress")]
@@ -57,24 +63,31 @@ impl<'a> Input<'a> {
 
         match 1 {
             #[cfg(feature = "unbz2")]
-            _ if buf.starts_with(&BZIP2_MAGIC) => Input::with_buffer(MultiBzDecoder::new(reader), label),
+            _ if buf.starts_with(&BZIP2_MAGIC) => Input::with_buffer(MultiBzDecoder::new(reader), label, "bzip2"),
             #[cfg(feature = "ungz")]
-            _ if buf.starts_with(&GZIP_MAGIC) => Input::with_buffer(MultiGzDecoder::new(reader), label),
+            _ if buf.starts_with(&GZIP_MAGIC) => Input::with_buffer(MultiGzDecoder::new(reader), label, "gzip"),
+            #[cfg(feature = "unlz4")]
+            _ if buf.starts_with(&LZ4_MAGIC) => Input::with_buffer(FrameDecoder::new(reader), label, "lz4"),
             #[cfg(feature = "unxz")]
-            _ if buf.starts_with(&XZ_MAGIC) => Input::with_buffer(XzDecoder::new(reader), label),
+            _ if buf.starts_with(&XZ_MAGIC) => Input::with_buffer(XzDecoder::new(reader), label, "xz"),
             #[cfg(feature = "unzstd")]
-            _ if buf.starts_with(&ZSTD_MAGIC) => Input::with_buffer(ZstdDecoder::with_buffer(reader)?, label),
-            _ => Ok(Input { label: label.to_string(), inner: Box::new(reader) }),
+            _ if buf.starts_with(&ZSTD_MAGIC) => Input::with_buffer(ZstdDecoder::with_buffer(reader)?, label, "zstd"),
+            _ => Ok(Input { inner: Box::new(reader), label: label.to_string(), format: None }),
         }
     }
 
     #[cfg(not(feature = "_any_decompress"))]
     pub fn reader<T: Display>(reader: impl BufRead + 'a, label: T) -> io::Result<Input<'a>> {
-        Ok(Input { label: label.to_string(), inner: Box::new(reader) })
+        Ok(Input { inner: Box::new(reader), label: label.to_string(), format: None, })
     }
 
     pub fn get_label(&self) -> &str {
         &self.label
+    }
+
+    #[allow(dead_code)]
+    pub fn get_format(&self) -> &Option<&'static str> {
+        &self.format
     }
 }
 
