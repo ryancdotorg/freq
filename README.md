@@ -5,17 +5,22 @@ Arguments:
   [FILES]...
 
 Options:
-  -d <N>                Digits of precision [default: 3]
-  -l <N>                Limit output to top N values
-  -m, --min <N>         Limit output to values seen at least N times [default: 1]
-  -r, --reverse         Return least common values first
-  -U, --uniq            Just output unique lines
-  -n, --number          Number lines
-  -R, --running         Show running total
+  -d, --digits <N>      Digits of precision [default: 3]
+  -l, --limit <N>       Limit output to top N values
+  -m, --min <N>         Limit output to values seen at least N times
+  -x, --max <N>         Limit output to values seen at most N times
+  -I, --insertion       Sort values with same frequency by original order [default]
+  -L, --lexigraphic     Sort values with same frequency lexicographically
+  -U, --unstable        Do not sort values with same frequency
+  -F, --no-freq-sort    Do not sort by frequency
+  -r, --reverse         Output least common values first
+  -u, --unique          Output unique values with no additional data
+  -n, --number          Include line numbers
+  -s, --sum             Include running sum totals
+  -P, --no-pct          Omit percent column
+  -C, --no-cdf          Omit CDF column
   -t, --tsv             Tab delimited output
   -c, --csv             Comma seperated output
-  -P, --no-pct          Don't show percent
-  -C, --no-cdf          Don't show CDF
   -h, --help            Print help
   -V, --version         Print version
       --semver <RANGE>  Check version and exit

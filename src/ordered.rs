@@ -2,55 +2,29 @@ use std::cmp::Ordering::{self, Equal};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
-pub struct OrderedString<T>(T, String);
+pub struct Ordered<T, U>(T, U);
 
-impl<T> OrderedString<T> {
-    pub fn new(n: T, s: String) -> OrderedString<T> {
-        OrderedString(n, s)
+impl<T, U> Ordered<T, U> {
+    pub fn new(n: T, s: U) -> Ordered<T, U> {
+        Ordered(n, s)
     }
 }
 
-impl<T> From<OrderedString<T>> for String {
-    fn from(value: OrderedString<T>) -> Self {
-        value.1
-    }
-}
-
-impl<'a, T> From<&'a OrderedString<T>> for &'a str {
-    fn from(value: &'a OrderedString<T>) -> Self {
-        &value.1
-    }
-}
-
-impl<T> Deref for OrderedString<T> {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.1
-    }
-}
-
-impl<T> AsRef<str> for OrderedString<T> {
-    fn as_ref(&self) -> &str {
-        &self.1
-    }
-}
-
-impl<T> Hash for OrderedString<T> {
+impl<T, U: Hash> Hash for Ordered<T, U> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.1.hash(state);
     }
 }
 
-impl<T> PartialEq for OrderedString<T> {
+impl<T, U: PartialEq> PartialEq for Ordered<T, U> {
     fn eq(&self, other: &Self) -> bool {
         self.1 == other.1
     }
 }
 
-impl<T: Eq> Eq for OrderedString<T> {}
+impl<T: Eq, U: Eq> Eq for Ordered<T, U> {}
 
-impl<T: PartialOrd> PartialOrd for OrderedString<T> {
+impl<T: PartialOrd, U: PartialOrd> PartialOrd for Ordered<T, U> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let s_cmp = self.1.partial_cmp(&other.1);
         if s_cmp == Some(Equal) {
@@ -66,7 +40,7 @@ impl<T: PartialOrd> PartialOrd for OrderedString<T> {
     }
 }
 
-impl<T: Ord> Ord for OrderedString<T> {
+impl<T: Ord, U: Ord> Ord for Ordered<T, U> {
     fn cmp(&self, other: &Self) -> Ordering {
         let s_cmp = self.1.cmp(&other.1);
         if s_cmp == Equal {
@@ -79,5 +53,33 @@ impl<T: Ord> Ord for OrderedString<T> {
                 n_cmp
             }
         }
+    }
+}
+
+pub type OrderedString = Ordered<usize, String>;
+
+impl From<OrderedString> for String {
+    fn from(value: OrderedString) -> Self {
+        value.1
+    }
+}
+
+impl<'a> From<&'a OrderedString> for &'a str {
+    fn from(value: &'a OrderedString) -> Self {
+        &value.1
+    }
+}
+
+impl Deref for OrderedString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.1
+    }
+}
+
+impl AsRef<str> for OrderedString {
+    fn as_ref(&self) -> &str {
+        &self.1
     }
 }

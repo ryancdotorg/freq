@@ -46,12 +46,12 @@ impl<'a> Input<'a> {
         Input::reader(BufReader::new(file), label)
     }
 
-    #[cfg(feature = "_decompress")]
+    #[cfg(feature = "_any_decompress")]
     fn with_buffer<R: Read + 'a, T: Display>(read: R, label: T) -> io::Result<Input<'a>> {
         Ok(Input { label: label.to_string(), inner: Box::new(BufReader::new(read)), })
     }
 
-    #[cfg(feature = "_decompress")]
+    #[cfg(feature = "_any_decompress")]
     pub fn reader<T: Display>(mut reader: impl BufRead + 'a, label: T) -> io::Result<Input<'a>> {
         let buf = reader.fill_buf()?;
 
@@ -68,7 +68,7 @@ impl<'a> Input<'a> {
         }
     }
 
-    #[cfg(not(feature = "_decompress"))]
+    #[cfg(not(feature = "_any_decompress"))]
     pub fn reader<T: Display>(reader: impl BufRead + 'a, label: T) -> io::Result<Input<'a>> {
         Ok(Input { label: label.to_string(), inner: Box::new(reader) })
     }
