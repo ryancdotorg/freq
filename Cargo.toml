@@ -1,6 +1,6 @@
 [package]
 name = "freq"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Ryan Castellucci <code@ryanc.org>"]
 edition = "2021"
 resolver = "2"
@@ -10,6 +10,9 @@ clap = { version = "4", features = ["derive"] }
 counter = { version = "0.6" }
 build-info = "0"
 semver = "1"
+
+regex = { version = "1", optional = true }
+
 bzip2 = { version = "0.5", optional = true }
 flate2 = { version = "1.0", optional = true }
 lz4_flex = { version = "0.11", optional = true }
@@ -22,6 +25,11 @@ build-info-build = "0"
 
 [features]
 default = ["egg"]
+all = ["decompress", "regex"]
+
+regex = ["dep:regex", "_regex"]
+_regex = []
+
 decompress = ["unbz2", "ungz", "unlz4", "unxz", "unzstd"]
 unbz2 = ["dep:bzip2", "_any_decompress"]
 ungz = ["dep:flate2", "_any_decompress"]
@@ -29,6 +37,7 @@ unlz4 = ["dep:lz4_flex", "_any_decompress"]
 unxz = ["dep:xz2", "_any_decompress"]
 unzstd = ["dep:zstd", "_any_decompress"]
 _any_decompress = []
+
 egg = []
 
 [[bin]]

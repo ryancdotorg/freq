@@ -20,11 +20,24 @@ use clap::{CommandFactory, Parser};
 use counter::Counter;
 use semver::{Version, VersionReq};
 
+#[cfg(feature = "regex")]
+use regex::Regex;
+
 #[derive(Debug, Parser)]
 #[command(name = env!("CARGO_PKG_NAME"))]
 #[command(version = build_info::format!("v{}", $.crate_info.version))]
 #[command(author, about, long_about = None)]
 pub struct Freq {
+    #[cfg(feature = "_regex")]
+    #[arg(short = 'g', long, value_name = "REGEX", help = "\
+        Match regular expression - behavior depends on capture groups.\n\n\
+        * With no capture group, matching lines will be counted.\n\
+        * With one capture group, the captured portion of matching\n  \
+          lines will be counted.\n\
+        * With two named capture groups (`n` and `item`), `n`\n  \
+          will be parsed as the number of occurrences of `item`.\n")]
+    regex: Option<String>,
+
     #[arg(short, long, value_parser = 0..=8, default_value = "3", value_name = "N", help = "Digits of precision")]
     digits: i64,
 
@@ -202,6 +215,14 @@ impl Freq {
 
         self.check_args()?;
 
+        #[cfg(feature = "_regex")]
+        let mut counter = if let Some(ref re) = self.regex {
+            self.counter_regex(&Regex::new(re).expect("Invalid regular expression!"))?
+        } else {
+            self.counter()?
+        };
+
+        #[cfg(not(feature = "_regex"))]
         let mut counter = self.counter()?;
 
         // return success if there's no data
@@ -368,12 +389,44 @@ impl Freq {
             .flat_map(|i| {
                 let label = i.get_label().to_string();
                 i.lines().enumerate().filter_map(move |(index, line)| {
-                    if let Err(e) = line {
-                        eprintln!("{}:{}:Error({}): {}", label, index, e.kind(), e,);
-                        None
-                    } else {
-                        // track the order in which values were seen
-                        line.map_or(None, |s| Some(OrderedString::new(index, s)))
+                    match line {
+                        Err(e) => {
+                            eprintln!("{}:{}:Error({}): {}", label, index, e.kind(), e,);
+                            None
+                        },
+                        Ok(s) => Some(OrderedString::new(index, s)),
+                    }
+                })
+            })
+            .collect::<Counter<_>>())
+    }
+
+    #[cfg(feature = "_regex")]
+    fn counter_regex(&mut self, re: &Regex) -> Result<Counter<OrderedString>, FatalError> {
+        // run the counter over the lines
+        Ok(self.inputs()?
+            .into_iter()
+            .flat_map(|i| {
+                let label = i.get_label().to_string();
+                i.lines().enumerate().filter_map(move |(index, line)| {
+                    match line {
+                        Err(e) => {
+                            eprintln!("{}:{}:Error({}): {}", label, index, e.kind(), e,);
+                            None
+                        },
+                        Ok(s) => {
+                            (re).captures(&s)
+                                .map(|c| match c.len() {
+                                    1 => (OrderedString::new(index, s.to_string()), 1),
+                                    2 => (OrderedString::new(index, c.get(1).unwrap().as_str().to_string()), 1),
+                                    3 if c.name("n").is_some() && c.name("item").is_some() => {
+                                        let count: usize = c.name("n").unwrap().as_str().parse().expect("Invalid n!");
+                                        let item = c.name("item").unwrap().as_str().to_string();
+                                        (OrderedString::new(index, item), count)
+                                    },
+                                    _ => panic!("Bad regular expression!"),
+                                })
+                        }
                     }
                 })
             })
