@@ -1,3 +1,11 @@
+Over the years, I’ve found myself doing a lot of ad-hoc data analysis with
+shell pipelines involving `grep`, `sed`, `awk`, `sort`, `uniq -c`, and `sort -rn`
+to look at distributions of values in datasets. I wrote `freq` to streamline
+these tasks, and I use it daily.
+
+It has feature flags to enable transparent decompression of several file
+types, and also regular expression filtering/munging support.
+
 ```
 Usage: freq [OPTIONS] [FILES]...
 
@@ -5,6 +13,14 @@ Arguments:
   [FILES]...
 
 Options:
+  -g, --regex <REGEX>   Match regular expression - behavior depends on capture groups.
+
+                        * With no capture group, matching lines will be counted.
+                        * With one capture group, the captured portion of matching
+                          lines will be counted.
+                        * With two named capture groups (`n` and `item`), `n`
+                          will be parsed as the number of occurrences of `item`.
+
   -d, --digits <N>      Digits of precision [default: 3]
   -l, --limit <N>       Limit output to top N values
   -m, --min <N>         Limit output to values seen at least N times
