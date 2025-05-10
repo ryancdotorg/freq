@@ -217,7 +217,7 @@ impl Freq {
 
         #[cfg(feature = "_regex")]
         let mut counter = if let Some(ref re) = self.regex {
-            self.counter_regex(&Regex::new(re).expect("Invalid regular expression!"))?
+            self.counter_regex(&Regex::new(re)?)?
         } else {
             self.counter()?
         };

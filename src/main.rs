@@ -22,19 +22,20 @@ build_info::build_info!(fn binfo);
 
 fn get_long_version() -> &'static str {
     let info = binfo();
-    let mut parts = Vec::<String>::new();
-    parts.push("v".to_string());
-    parts.push(info.crate_info.version.to_string());
+    let version = format!("v{}", info.crate_info.version);
+    let mut parts = vec![version.clone()];
 
     if let Some(vc) = &info.version_control {
         if let Some(git) = &vc.git() {
-            parts.push("+".to_string());
-            if let Some(branch) = &git.branch {
-                parts.push(format!("{}.", branch));
-            }
-            parts.push(git.commit_short_id.to_string());
-            if git.dirty {
-                parts.push("-dirty".to_string());
+            if git.dirty || !git.tags.contains(&version) {
+                parts.push("+".to_string());
+                if let Some(branch) = &git.branch {
+                    parts.push(format!("{}.", branch));
+                }
+                parts.push(git.commit_short_id.to_string());
+                if git.dirty {
+                    parts.push("-dirty".to_string());
+                }
             }
             parts.push(" (".to_string());
             parts.push(info.target.triple.to_string());
