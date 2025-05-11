@@ -1,3 +1,9 @@
+# freq
+
+A tool for counting frequency of items and showing related statistics.
+
+## Description
+
 Over the years, I’ve found myself doing a lot of ad-hoc data analysis with
 shell pipelines involving `grep`, `sed`, `awk`, `sort`, `uniq -c`, and `sort -rn`
 to look at distributions of values in datasets. I wrote `freq` to streamline
@@ -5,6 +11,8 @@ these tasks, and I use it daily.
 
 It has feature flags to enable transparent decompression of several file
 types, and also regular expression filtering/munging support.
+
+## Usage
 
 ```
 Usage: freq [OPTIONS] [FILES]...
@@ -42,6 +50,8 @@ Options:
       --semver <RANGE>  Check version and exit
 ```
 
+## Example Output
+
 ```
 tr 'A-Z ' 'a-z\n' < 2600.txt.utf-8 | freq -l30 -g "^([a-z]+)[,.]*$"
   34269   6.547   6.547  the
@@ -75,3 +85,25 @@ tr 'A-Z ' 'a-z\n' < 2600.txt.utf-8 | freq -l30 -g "^([a-z]+)[,.]*$"
    2401   0.459  40.306  were
    2390   0.457  40.763  by
 ```
+
+## Help
+
+You can file an issue on GitHub, however I may not respond. This software is
+being provided without warranty in the hopes that it may be useful.
+
+## Author
+
+* [Ryan Castellucci](https://rya.nc/) [@ryancdotorg](https://github.com/ryancdotorg) https://rya.nc
+
+## Donations
+
+I am currently involved in a protracted
+[civil rights case](https://www.leighday.co.uk/news/news/2023-news/legal-challenge-urges-government-to-give-legal-recognition-to-nonbinary-people/)
+against the British government. If you find my work useful,
+**please donate to my [crowdfunding effort](https://enby.org.uk/)**.
+
+## License
+
+This project may be used under the terms of your choice of the
+[GNU GPL version 2](LICENSE.GPL-2.0), or the
+[GNU GPL version 3](LICENSE.GPL-3.0).
