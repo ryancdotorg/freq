@@ -86,6 +86,22 @@ tr 'A-Z ' 'a-z\n' < 2600.txt.utf-8 | freq -l30 -g "^([a-z]+)[,.]*$"
    2390   0.457  40.763  by
 ```
 
+## Getting Started
+
+### Dependencies
+
+* A Rust toolchain with `cargo`.
+
+### Installation
+
+Clone the repo, then
+
+Basic: `cargo install --path freq --release`
+
+All native Rust features: `cargo install --path freq --release --features ungz,unlz4,regex`
+
+Full: `cargo install --path freq --release --features all`
+
 ## Help
 
 You can file an issue on GitHub, however I may not respond. This software is
