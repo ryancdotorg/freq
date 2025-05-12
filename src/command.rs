@@ -97,6 +97,80 @@ pub struct Freq {
     files_raw: Vec<String>,
 }
 
+#[cfg(feature = "regex")]
+fn mk_apply_re(re: &Regex) -> Box<dyn Fn(&str) -> Option<(usize, String)> + '_> {
+    use std::collections::HashSet;
+    #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+    enum Group {
+        Name(String),
+        Number(usize),
+    }
+
+    let mut data = re.capture_names()
+        .enumerate()
+        .skip(1)
+        .map(|(a, b)| b.map_or_else(
+            || Group::Number(a),
+            |v| Group::Name(v.into()))
+        )
+        .collect::<HashSet<_>>();
+
+    let has_n = data.remove(&Group::Name("n".into()));
+
+    let mut list = data.into_iter().collect::<Vec<_>>();
+    list.sort();
+
+    if has_n {
+        if list.is_empty() {
+            panic!("no data capture");
+        }
+
+        // return matched parts with count
+        Box::new(move |s: &str| {
+            if let Some(captures) = re.captures(s) {
+                let n: usize = captures.name("n")
+                    .expect("no group n")
+                    .as_str()
+                    .parse()
+                    .expect("group n doesn't contain a number");
+                let item = list.iter().map(|v| match v {
+                        Group::Name(name) => captures.name(name),
+                        Group::Number(num) => captures.get(*num),
+                    })
+                    .map(|v| v.map_or_else(|| "", |v| v.as_str()).to_string())
+                    .collect::<Vec<_>>().join("\t");
+                Some((n, item))
+            } else {
+                None
+            }
+        })
+    } else if list.is_empty() {
+        // return entire matched line
+        Box::new(move |s: &str| {
+            if let Some(_) = re.captures(s) {
+                Some((1usize, s.to_string()))
+            } else {
+                None
+            }
+        })
+    } else {
+        // return matched parts
+        Box::new(move |s: &str| {
+            if let Some(captures) = re.captures(s) {
+                let item = list.iter().map(|v| match v {
+                        Group::Name(name) => captures.name(name),
+                        Group::Number(num) => captures.get(*num),
+                    })
+                    .map(|v| v.map_or_else(|| "", |v| v.as_str()).to_string())
+                    .collect::<Vec<_>>().join("\t");
+                Some((1usize, item))
+            } else {
+                None
+            }
+        })
+    }
+}
+
 fn n_width(n: usize) -> usize {
     match n {
         0 => 1,
@@ -176,7 +250,6 @@ impl fmt::Display for FatalError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.1.fmt(f) }
 }
 
-// SAFETY: 255 is not zero
 const DEFAULT_ERROR_CODE: NonZeroI32 = NonZeroI32::new(255).unwrap();
 
 impl FatalError {
@@ -403,6 +476,9 @@ impl Freq {
 
     #[cfg(feature = "_regex")]
     fn counter_regex(&mut self, re: &Regex) -> Result<Counter<OrderedString>, FatalError> {
+        // create closure to apply regular expression
+        let ref apply_re = mk_apply_re(re);
+
         // run the counter over the lines
         Ok(self.inputs()?
             .into_iter()
@@ -415,17 +491,7 @@ impl Freq {
                             None
                         },
                         Ok(s) => {
-                            (re).captures(&s)
-                                .map(|c| match c.len() {
-                                    1 => (OrderedString::new(index, s.to_string()), 1),
-                                    2 => (OrderedString::new(index, c.get(1).unwrap().as_str().to_string()), 1),
-                                    3 if c.name("n").is_some() && c.name("item").is_some() => {
-                                        let count: usize = c.name("n").unwrap().as_str().parse().expect("Invalid n!");
-                                        let item = c.name("item").unwrap().as_str().to_string();
-                                        (OrderedString::new(index, item), count)
-                                    },
-                                    _ => panic!("Bad regular expression!"),
-                                })
+                            apply_re(&s).map(|(count, item)| (OrderedString::new(index, item), count))
                         }
                     }
                 })

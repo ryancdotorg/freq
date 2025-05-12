@@ -1,9 +1,10 @@
 [package]
 name = "freq"
-version = "0.6.4"
+version = "0.7.0"
 readme = "README.md"
 repository = "https://github.com/ryancdotorg/freq"
 license = "GPL-2.0-only OR GPL-3.0-only"
+categories = ["command-line-utilities"]
 authors = ["Ryan Castellucci <code@ryanc.org>"]
 edition = "2024"
 resolver = "2"
