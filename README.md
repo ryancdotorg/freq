@@ -14,6 +14,8 @@ types, and also regular expression filtering/munging support.
 
 ## Usage
 
+TODO: better regex documentation
+
 ```
 Usage: freq [OPTIONS] [FILES]...
 
