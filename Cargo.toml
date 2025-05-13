@@ -1,13 +1,15 @@
 [package]
 name = "freq"
-version = "0.7.0"
+version = "0.7.1"
 readme = "README.md"
 repository = "https://github.com/ryancdotorg/freq"
+description = "A command line tool for counting frequency of items and showing related statistics."
 license = "GPL-2.0-only OR GPL-3.0-only"
 categories = ["command-line-utilities"]
 authors = ["Ryan Castellucci <code@ryanc.org>"]
-edition = "2024"
+edition = "2021"
 resolver = "2"
+exclude = ["*.sh"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -16,6 +18,7 @@ build-info = "0"
 semver = "1"
 
 regex = { version = "1", optional = true }
+fancy-regex = { version = "0.14", optional = true }
 
 bzip2 = { version = "0.5", optional = true }
 flate2 = { version = "1.0", optional = true }
@@ -26,12 +29,16 @@ zstd = { version = "0.13", optional = true }
 [build-dependencies]
 build-info = "0"
 build-info-build = "0"
+git2 = { version = "0.20.2", default-features = false }
 
 [features]
-default = ["egg"]
-all = ["decompress", "regex"]
+default = ["egg", "ungz", "regex-basic"]
+all = ["decompress", "regex-fancy"]
+full = ["all"]
 
-regex = ["dep:regex", "_regex"]
+regex = ["regex-basic"]
+regex-basic = ["dep:regex", "_regex"]
+regex-fancy = ["dep:fancy-regex", "_regex"]
 _regex = []
 
 decompress = ["unbz2", "ungz", "unlz4", "unxz", "unzstd"]

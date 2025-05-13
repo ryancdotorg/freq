@@ -17,7 +17,7 @@ for target in aarch64-unknown-linux-musl armv7-unknown-linux-musleabihf x86_64-u
 do
   PATH="${CROSS_ROOT}/${target}/bin:${PATH}" \
   RUSTFLAGS="-C linker=${CROSS_ROOT}/${target}/bin/${target}-ld" \
-    cargo build --features decompress,regex --profile="${PROFILE}" --target="${target}"
+    cargo build --features all --profile="${PROFILE}" --target="${target}"
   # if we're building from a clean tagged tree, generate release binaries
   if [ "$GIT_IS_CLEAN" = "yes" ] && [ "$GIT_TAG" = "v$PKG_VERSION" ]; then
     for bin in $BINARIES

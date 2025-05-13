@@ -9,14 +9,15 @@ mod egg;
 
 mod ordered;
 
+mod build_features;
+use build_features::*;
+
 // stdlib
 use std::process::exit;
 
 // packages
 //use clap::builder::styling::*;
 use clap::{CommandFactory, FromArgMatches};
-
-include!(concat!(env!("OUT_DIR"),"/build_features.rs"));
 
 build_info::build_info!(fn binfo);
 
@@ -63,6 +64,8 @@ fn get_long_version() -> &'static str {
             "\nFeatures: {}",
             FEATURES.join(" "),
         ));
+    } else {
+        parts.push(String::from("\nFeatures: None"));
     }
 
     Box::leak(parts.join("").into_boxed_str())

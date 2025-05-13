@@ -98,11 +98,11 @@ tr 'A-Z ' 'a-z\n' < 2600.txt.utf-8 | freq -l30 -g "^([a-z]+)[,.]*$"
 
 Clone the repo, then
 
-Basic: `cargo install --path freq --release`
+Lite: `cargo install --path freq --no-default-features`
 
-All native Rust features: `cargo install --path freq --release --features ungz,unlz4,regex`
+Standard: `cargo install --path freq`
 
-Full: `cargo install --path freq --release --features all`
+Full: `cargo install --path freq --features full`
 
 ## Help
 

@@ -6,6 +6,8 @@ use crate::egg::egg;
 
 use crate::ordered::OrderedString;
 
+use crate::build_features::*;
+
 // stdlib
 use std::cmp::max;
 use std::fmt;
@@ -20,22 +22,18 @@ use clap::{CommandFactory, Parser};
 use counter::Counter;
 use semver::{Version, VersionReq};
 
-#[cfg(feature = "regex")]
-use regex::Regex;
+#[cfg(all(feature = "regex-basic", not(feature = "regex-fancy")))]
+use regex::{Regex, Captures};
+#[cfg(feature = "regex-fancy")]
+use fancy_regex::{Regex, Captures};
 
 #[derive(Debug, Parser)]
 #[command(name = env!("CARGO_PKG_NAME"))]
-#[command(version = build_info::format!("v{}", $.crate_info.version))]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(author, about, long_about = None)]
 pub struct Freq {
     #[cfg(feature = "_regex")]
-    #[arg(short = 'g', long, value_name = "REGEX", help = "\
-        Match regular expression - behavior depends on capture groups.\n\n\
-        * With no capture group, matching lines will be counted.\n\
-        * With one capture group, the captured portion of matching\n  \
-          lines will be counted.\n\
-        * With two named capture groups (`n` and `item`), `n`\n  \
-          will be parsed as the number of occurrences of `item`.\n")]
+    #[arg(short = 'g', long, alias = "regexp", value_name = "REGEX", help = "Match regular expression (--regex-help for details)")]
     regex: Option<String>,
 
     #[arg(short, long, value_parser = 0..=8, default_value = "3", value_name = "N", help = "Digits of precision")]
@@ -86,9 +84,11 @@ pub struct Freq {
     #[arg(short, long, conflicts_with = "tsv", help = "Comma seperated output")]
     csv: bool,
 
-
-    #[arg(long, display_order = 1000, value_name = "RANGE", help = "Check version and exit")]
+    #[arg(long = "check-version", alias = "semver", display_order = 1000, value_name = "RANGE", help = "Check version against a semver range and exit")]
     semver: Option<String>,
+
+    #[arg(long, display_order = 1001, value_name = "FEATURE", help = "Check if compiled with specified feature and exit")]
+    check_feature: Option<Vec<String>>,
 
     files: Vec<String>,
 
@@ -97,7 +97,19 @@ pub struct Freq {
     files_raw: Vec<String>,
 }
 
-#[cfg(feature = "regex")]
+#[cfg(all(feature = "regex-basic", not(feature = "regex-fancy")))]
+#[inline]
+fn re_captures<'a>(re: &'a Regex, s: &'a str) -> Option<Captures<'a>> {
+    re.captures(s)
+}
+
+#[cfg(feature = "regex-fancy")]
+#[inline]
+fn re_captures<'a>(re: &'a Regex, s: &'a str) -> Option<Captures<'a>> {
+    re.captures(s).unwrap_or(None)
+}
+
+#[cfg(feature = "_regex")]
 fn mk_apply_re(re: &Regex) -> Box<dyn Fn(&str) -> Option<(usize, String)> + '_> {
     use std::collections::HashSet;
     #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -127,7 +139,7 @@ fn mk_apply_re(re: &Regex) -> Box<dyn Fn(&str) -> Option<(usize, String)> + '_> 
 
         // return matched parts with count
         Box::new(move |s: &str| {
-            if let Some(captures) = re.captures(s) {
+            if let Some(captures) = re_captures(re, s) {
                 let n: usize = captures.name("n")
                     .expect("no group n")
                     .as_str()
@@ -147,7 +159,7 @@ fn mk_apply_re(re: &Regex) -> Box<dyn Fn(&str) -> Option<(usize, String)> + '_> 
     } else if list.is_empty() {
         // return entire matched line
         Box::new(move |s: &str| {
-            if let Some(_) = re.captures(s) {
+            if let Some(_) = re_captures(re, s) {
                 Some((1usize, s.to_string()))
             } else {
                 None
@@ -156,7 +168,7 @@ fn mk_apply_re(re: &Regex) -> Box<dyn Fn(&str) -> Option<(usize, String)> + '_> 
     } else {
         // return matched parts
         Box::new(move |s: &str| {
-            if let Some(captures) = re.captures(s) {
+            if let Some(captures) = re_captures(re, s) {
                 let item = list.iter().map(|v| match v {
                         Group::Name(name) => captures.name(name),
                         Group::Number(num) => captures.get(*num),
@@ -282,8 +294,23 @@ type FnCmp = fn(&CounterItem, &CounterItem) -> std::cmp::Ordering;
 
 impl Freq {
     pub fn exec(mut self) -> Result<i32, FatalError> {
-        if self.semver.is_some() {
-            return self.semver();
+        let version_result = match self.semver {
+            Some(_) => Some((&self).check_version()?),
+            None => None,
+        };
+
+        if let Some(version_result) = version_result {
+            return Ok(version_result);
+        }
+
+        if let Some(check_feature) = self.check_feature {
+            let missing = check_feature.iter()
+                .map(|f| f.to_ascii_uppercase())
+                .map(|f| f.replace("-", "_"))
+                .filter(|f| !FEATURES.contains(&f.as_str()))
+                .collect::<Vec<_>>();
+            println!("{:?}", missing);
+            return Ok(0);
         }
 
         self.check_args()?;
@@ -408,8 +435,8 @@ impl Freq {
         Ok(0)
     }
 
-    fn semver(self) -> Result<i32, FatalError> {
-        let req = VersionReq::parse(&self.semver.unwrap())?;
+    fn check_version(&self) -> Result<i32, FatalError> {
+        let req = VersionReq::parse(self.semver.as_ref().unwrap())?;
         let ver = Version::parse(env!("CARGO_PKG_VERSION"))?;
         Ok(if req.matches(&ver) { 0 } else { 1 })
     }
