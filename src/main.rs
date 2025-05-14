@@ -19,58 +19,6 @@ use std::process::exit;
 //use clap::builder::styling::*;
 use clap::{CommandFactory, FromArgMatches};
 
-build_info::build_info!(fn binfo);
-
-fn get_long_version() -> &'static str {
-    let info = binfo();
-    let version = format!("v{}", info.crate_info.version);
-    let mut parts = vec![version.clone()];
-
-    if let Some(vc) = &info.version_control {
-        if let Some(git) = &vc.git() {
-            if git.dirty || !git.tags.contains(&version) {
-                parts.push("+".to_string());
-                if let Some(branch) = &git.branch {
-                    parts.push(format!("{}.", branch));
-                }
-                parts.push(git.commit_short_id.to_string());
-                if git.dirty {
-                    parts.push("-dirty".to_string());
-                }
-            }
-            parts.push(" (".to_string());
-            parts.push(info.target.triple.to_string());
-            parts.push(", ".to_string());
-            parts.push(PROFILE.to_string());
-            parts.push(")".to_string());
-        }
-    }
-
-    parts.push(build_info::format!(
-        "\nBuilt at {} with {}",
-        $.timestamp,
-        $.compiler,
-    ).to_string());
-
-    match info.crate_info.authors.len() {
-        0 => (),
-        1 => parts.push(format!("\nAuthor: {}", info.crate_info.authors[0])),
-        _ => parts.push(format!("\nAuthors: {}", info.crate_info.authors.join("; "))),
-    }
-
-    #[allow(clippy::const_is_empty)]
-    if !FEATURES.is_empty() {
-        parts.push(format!(
-            "\nFeatures: {}",
-            FEATURES.join(" "),
-        ));
-    } else {
-        parts.push(String::from("\nFeatures: None"));
-    }
-
-    Box::leak(parts.join("").into_boxed_str())
-}
-
 fn main() {
     /*
     let styles = Styles::styled()
@@ -80,12 +28,18 @@ fn main() {
         .placeholder(AnsiColor::Green.on_default() | Effects::BOLD);
     */
 
-    let freq = Freq::from_arg_matches(
-        &Freq::command()
+    let matches = Freq::command()
+        .disable_version_flag(true)
         .long_version(get_long_version())
         //.styles(styles)
-        .get_matches()
-    ).unwrap();
+        .get_matches();
+
+    let mut freq = Freq::from_arg_matches(&matches).unwrap();
+    // HACK clap doesn't have a way to differentiate long vs short flags, so...
+    freq.long_version = !std::env::args()
+        .filter(|v| v == "--version")
+        .collect::<Vec<_>>()
+        .is_empty();
 
     match freq.exec() {
         Ok(exit_code) => exit(exit_code),

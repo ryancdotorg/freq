@@ -84,17 +84,20 @@ pub struct Freq {
     #[arg(short, long, conflicts_with = "tsv", help = "Comma seperated output")]
     csv: bool,
 
-    #[arg(long = "check-version", alias = "semver", display_order = 1000, value_name = "RANGE", help = "Check version against a semver range and exit")]
-    semver: Option<String>,
+    #[arg(short = 'V', long, alias = "semver", display_order = 1000, value_name = "RANGE", help = "Print version or check against semver range and exit")]
+    version: Option<Option<String>>,
 
-    #[arg(long, display_order = 1001, value_name = "FEATURE", help = "Check if compiled with specified feature and exit")]
-    check_feature: Option<Vec<String>>,
+    #[arg(long = "feature", display_order = 1001, value_name = "FEATURE", help = "Check if compiled with feature and exit")]
+    features: Option<Vec<String>>,
 
     files: Vec<String>,
 
     // files coming after `--`
     #[arg(last = true, allow_hyphen_values = true, hide = true)]
     files_raw: Vec<String>,
+
+    #[arg(long = "", hide = true)]
+    pub long_version: bool,
 }
 
 #[cfg(all(feature = "regex-basic", not(feature = "regex-fancy")))]
@@ -294,23 +297,46 @@ type FnCmp = fn(&CounterItem, &CounterItem) -> std::cmp::Ordering;
 
 impl Freq {
     pub fn exec(mut self) -> Result<i32, FatalError> {
-        let version_result = match self.semver {
-            Some(_) => Some((&self).check_version()?),
+        let version_result = match self.version {
+            Some(ref arg) => match arg {
+                Some(_) => Some((&self).check_version()?),
+                None => {
+                    let output = if self.long_version {
+                        format!(
+                            "{} {}\n",
+                            Self::command().get_name(),
+                            get_long_version(),
+                        )
+                    } else {
+                        Self::command().render_version()
+                    };
+
+                    print!("{}", output);
+
+                    return Ok(0);
+                },
+            },
             None => None,
         };
 
-        if let Some(version_result) = version_result {
-            return Ok(version_result);
-        }
+        let feature_result = match self.features {
+            Some(ref features) => {
+                let missing = features.iter()
+                    .map(|f| f.to_ascii_uppercase())
+                    .map(|f| f.replace("-", "_"))
+                    .filter(|f| !FEATURES.contains(&f.as_str()))
+                    .collect::<Vec<_>>();
+                Some(if missing.is_empty() { 0 } else { 1 })
+            },
+            None => None,
+        };
 
-        if let Some(check_feature) = self.check_feature {
-            let missing = check_feature.iter()
-                .map(|f| f.to_ascii_uppercase())
-                .map(|f| f.replace("-", "_"))
-                .filter(|f| !FEATURES.contains(&f.as_str()))
-                .collect::<Vec<_>>();
-            println!("{:?}", missing);
-            return Ok(0);
+        if version_result.is_some() || feature_result.is_some() {
+            if version_result == Some(1) || feature_result == Some(1) {
+                return Ok(1);
+            } else {
+                return Ok(0);
+            }
         }
 
         self.check_args()?;
@@ -436,9 +462,13 @@ impl Freq {
     }
 
     fn check_version(&self) -> Result<i32, FatalError> {
-        let req = VersionReq::parse(self.semver.as_ref().unwrap())?;
-        let ver = Version::parse(env!("CARGO_PKG_VERSION"))?;
-        Ok(if req.matches(&ver) { 0 } else { 1 })
+        if let Some(semver) = self.version.as_ref().unwrap().as_ref() {
+            let req = VersionReq::parse(semver)?;
+            let ver = Version::parse(env!("CARGO_PKG_VERSION"))?;
+            Ok(if req.matches(&ver) { 0 } else { 1 })
+        } else {
+            Ok(1)
+        }
     }
 
     fn check_args(&self) -> Result<(), FatalError> {

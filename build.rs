@@ -1,4 +1,9 @@
-use std::{env, fs::File, io::{BufWriter, Write}, path::Path};
+use std::{
+    env,
+    fs::File,
+    io::{BufWriter, Write},
+    path::Path,
+};
 
 use git2::{self, Repository, Commit};
 
@@ -26,13 +31,13 @@ fn is_tag(repo: &Repository, commit: &Commit, tag_name: &str) -> bool {
 
     let mut not_found = true;
     // scan stops when closure returns false
-    let res = repo.tag_foreach(|oid, name| {
+    repo.tag_foreach(|oid, name| {
         if let Some(name) = String::from_utf8_lossy(name).strip_prefix("refs/tags/") {
             not_found = oid != commit_id || name != tag_name;
         }
 
         not_found
-    });
+    }).unwrap();
 
     !not_found
 }
@@ -102,30 +107,47 @@ fn main() {
         features(),
     ).as_bytes()).unwrap();
 
-    let repo = Repository::open(env!("CARGO_MANIFEST_DIR")).unwrap();
+    let short_version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    let mut long_version = String::from(&short_version);
 
-    let version_tag = format!("v{}", env!("CARGO_PKG_VERSION"));
-    let dirty = is_dirty(&repo);
-    let head = repo.head().unwrap();
-    let commit = head.peel_to_commit().unwrap();
-    let mut long_version = String::from(&version_tag);
-    if dirty || !is_tag(&repo, &commit, &version_tag) {
-        if has_tag(&repo, &version_tag) {
-            long_version.push('+');
+    if let Ok(repo) = Repository::open(env!("CARGO_MANIFEST_DIR")) {
+        let head = repo.head().unwrap();
+        let commit = head.peel_to_commit().unwrap();
+        let commit_short_id = commit.as_object()
+            .short_id().unwrap()
+            .as_str().unwrap()
+            .to_string();
+
+        let branch = if head.is_branch() {
+            head.shorthand().map(|s| s.to_string())
         } else {
-            long_version.push('-');
+            None
+        };
+
+        let dirty = is_dirty(&repo);
+        if dirty || !is_tag(&repo, &commit, &short_version) {
+            if has_tag(&repo, &short_version) {
+                long_version.push('+');
+            } else {
+                long_version.push_str("-pre+");
+            }
+
+            if let Some(ref branch) = branch {
+                long_version.push_str(branch);
+                long_version.push('.');
+            }
+
+            long_version.push_str(&commit_short_id);
+
+            if dirty {
+                long_version.push_str("-dirty");
+            }
         }
     }
 
     writer.write_all(format!(
-        "pub const TAGGED: bool = {};\n",
-        has_tag(&repo, &version_tag),
-    ).as_bytes()).unwrap();
-
-    writer.write_all(format!(
-        "pub const LONG_VERSION: &'static str = {:?} {:?};\n",
+        "pub const LONG_VERSION: &'static str = {:?};\n",
         long_version,
-        false,
     ).as_bytes()).unwrap();
 
     // output file implicitly closed
