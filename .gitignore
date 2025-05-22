@@ -1,6 +1,8 @@
 /target
 /dist
 /files
+*.1
+*.8
 *.swp
 *.bak
 *~

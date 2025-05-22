@@ -23,33 +23,28 @@ Arguments:
   [FILES]...
 
 Options:
-  -g, --regex <REGEX>   Match regular expression - behavior depends on capture groups.
-
-                        * With no capture group, matching lines will be counted.
-                        * With one capture group, the captured portion of matching
-                          lines will be counted.
-                        * With two named capture groups (`n` and `item`), `n`
-                          will be parsed as the number of occurrences of `item`.
-
-  -d, --digits <N>      Digits of precision [default: 3]
-  -l, --limit <N>       Limit output to top N values
-  -m, --min <N>         Limit output to values seen at least N times
-  -x, --max <N>         Limit output to values seen at most N times
-  -I, --insertion       Sort values with same frequency by original order [default]
-  -L, --lexigraphic     Sort values with same frequency lexicographically
-  -U, --unstable        Do not sort values with same frequency
-  -F, --no-freq-sort    Do not sort by frequency
-  -r, --reverse         Output least common values first
-  -u, --unique          Output unique values with no additional data
-  -n, --number          Include line numbers
-  -s, --sum             Include running sum totals
-  -P, --no-pct          Omit percent column
-  -C, --no-cdf          Omit CDF column
-  -t, --tsv             Tab delimited output
-  -c, --csv             Comma seperated output
-  -h, --help            Print help
-  -V, --version         Print version
-      --semver <RANGE>  Check version and exit
+  -o, --output <FILE>      Write output to FILE [default: STDOUT]
+  -g, --regex <REGEX>      Match regular expression (--regex-help for details)
+  -d, --digits <N>         Digits of precision [default: 3]
+  -l, --limit <N>          Limit output to top N values
+  -m, --min <N>            Limit output to values seen at least N times
+  -x, --max <N>            Limit output to values seen at most N times
+  -I, --insertion          Sort values with same frequency by original order [default]
+  -L, --lexigraphic        Sort values with same frequency lexicographically
+  -U, --unstable           Do not sort values with same frequency
+  -F, --no-freq-sort       Do not sort by frequency
+  -r, --reverse            Output least common values first
+  -u, --unique             Output unique values with no additional data
+  -n, --number             Include line numbers
+  -s, --sum                Include running sum totals
+  -P, --no-pct             Omit percent column
+  -C, --no-cdf             Omit CDF column
+  -t, --tsv                Tab delimited output
+  -c, --csv                Comma seperated output
+  -h, --help               Print help
+  -V, --version            Print version
+  -V, --version [<RANGE>]  Print version or check against semver range and exit
+      --feature <FEATURE>  Check if compiled with feature and exit
 ```
 
 ## Example Outputs

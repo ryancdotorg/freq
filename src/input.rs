@@ -3,29 +3,29 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::Path;
 
-#[cfg(feature = "unbz2")]
+#[cfg(feature = "bz2")]
 use bzip2::bufread::MultiBzDecoder;
-#[cfg(feature = "unbz2")]
+#[cfg(feature = "bz2")]
 const BZIP2_MAGIC: [u8; 3] = *b"BZh";
 
-#[cfg(feature = "ungz")]
+#[cfg(feature = "gz")]
 use flate2::bufread::MultiGzDecoder;
-#[cfg(feature = "ungz")]
+#[cfg(feature = "gz")]
 const GZIP_MAGIC:  [u8; 3] = [0x1f, 0x8b, 0x08];
 
-#[cfg(feature = "unlz4")]
+#[cfg(feature = "lz4")]
 use lz4_flex::frame::FrameDecoder;
-#[cfg(feature = "unlz4")]
+#[cfg(feature = "lz4")]
 const LZ4_MAGIC: [u8; 4] = [0x04, 0x22, 0x4d, 0x18];
 
-#[cfg(feature = "unxz")]
+#[cfg(feature = "xz")]
 use xz2::read::XzDecoder;
-#[cfg(feature = "unxz")]
+#[cfg(feature = "xz")]
 const XZ_MAGIC:    [u8; 6] = *b"\xfd7zXZ\0";
 
-#[cfg(feature = "unzstd")]
+#[cfg(feature = "zstd")]
 use zstd::stream::read::Decoder as ZstdDecoder;
-#[cfg(feature = "unzstd")]
+#[cfg(feature = "zstd")]
 const ZSTD_MAGIC:  [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
 
 pub struct Input<'a> {
@@ -62,15 +62,15 @@ impl<'a> Input<'a> {
         let buf = reader.fill_buf()?;
 
         match 1 {
-            #[cfg(feature = "unbz2")]
+            #[cfg(feature = "bz2")]
             _ if buf.starts_with(&BZIP2_MAGIC) => Input::with_buffer(MultiBzDecoder::new(reader), label, "bzip2"),
-            #[cfg(feature = "ungz")]
+            #[cfg(feature = "gz")]
             _ if buf.starts_with(&GZIP_MAGIC) => Input::with_buffer(MultiGzDecoder::new(reader), label, "gzip"),
-            #[cfg(feature = "unlz4")]
+            #[cfg(feature = "lz4")]
             _ if buf.starts_with(&LZ4_MAGIC) => Input::with_buffer(FrameDecoder::new(reader), label, "lz4"),
-            #[cfg(feature = "unxz")]
+            #[cfg(feature = "xz")]
             _ if buf.starts_with(&XZ_MAGIC) => Input::with_buffer(XzDecoder::new(reader), label, "xz"),
-            #[cfg(feature = "unzstd")]
+            #[cfg(feature = "zstd")]
             _ if buf.starts_with(&ZSTD_MAGIC) => Input::with_buffer(ZstdDecoder::with_buffer(reader)?, label, "zstd"),
             _ => Ok(Input { inner: Box::new(reader), label: label.to_string(), format: None }),
         }

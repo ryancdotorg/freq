@@ -29,10 +29,12 @@ zstd = { version = "0.13", optional = true }
 [build-dependencies]
 build-info = "0"
 build-info-build = "0"
+clap = { version = "4", features = ["derive"] }
+clap_mangen = "0.2.26"
 git2 = { version = "0.20.2", default-features = false }
 
 [features]
-default = ["egg", "ungz", "regex-basic"]
+default = ["egg", "gz", "regex-basic"]
 all = ["decompress", "regex-fancy"]
 full = ["all"]
 
@@ -41,12 +43,12 @@ regex-basic = ["dep:regex", "_regex"]
 regex-fancy = ["dep:fancy-regex", "_regex"]
 _regex = []
 
-decompress = ["unbz2", "ungz", "unlz4", "unxz", "unzstd"]
-unbz2 = ["dep:bzip2", "_any_decompress"]
-ungz = ["dep:flate2", "_any_decompress"]
-unlz4 = ["dep:lz4_flex", "_any_decompress"]
-unxz = ["dep:xz2", "_any_decompress"]
-unzstd = ["dep:zstd", "_any_decompress"]
+decompress = ["bz2", "gz", "lz4", "xz", "zstd"]
+bz2 = ["dep:bzip2", "_any_decompress"]
+gz = ["dep:flate2", "_any_decompress"]
+lz4 = ["dep:lz4_flex", "_any_decompress"]
+xz = ["dep:xz2", "_any_decompress"]
+zstd = ["dep:zstd", "_any_decompress"]
 _any_decompress = []
 
 egg = []

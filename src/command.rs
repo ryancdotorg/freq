@@ -11,7 +11,8 @@ use crate::build_features::*;
 // stdlib
 use std::cmp::max;
 use std::fmt;
-use std::io::{self, BufRead};
+use std::fs::File;
+use std::io::{self, Write, LineWriter, BufRead};
 use std::mem::take;
 use std::num::{NonZeroUsize, NonZeroI32};
 use std::ops::Deref;
@@ -27,16 +28,22 @@ use regex::{Regex, Captures};
 #[cfg(feature = "regex-fancy")]
 use fancy_regex::{Regex, Captures};
 
+include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/args.rs"));
+
+/*
 #[derive(Debug, Parser)]
 #[command(name = env!("CARGO_PKG_NAME"))]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(author, about, long_about = None)]
 pub struct Freq {
+    #[arg(short, long, value_name = "FILE", help = "Write output to FILE [default: STDOUT]")]
+    output: Option<String>,
+
     #[cfg(feature = "_regex")]
     #[arg(short = 'g', long, alias = "regexp", value_name = "REGEX", help = "Match regular expression (--regex-help for details)")]
     regex: Option<String>,
 
-    #[arg(short, long, value_parser = 0..=8, default_value = "3", value_name = "N", help = "Digits of precision")]
+    #[arg(short, long, value_parser = 0..=9, default_value = "3", value_name = "N", help = "Digits of precision")]
     digits: i64,
 
     #[arg(short, long, value_name = "N", help = "Limit output to top N values")]
@@ -99,6 +106,7 @@ pub struct Freq {
     #[arg(long = "", hide = true)]
     pub long_version: bool,
 }
+*/
 
 #[cfg(all(feature = "regex-basic", not(feature = "regex-fancy")))]
 #[inline]
@@ -247,9 +255,11 @@ fn mk_cdf(digits: usize, lpad: bool) -> Box<dyn Fn(usize, usize, usize, usize) -
 
 #[inline(always)]
 fn pf_div(n: usize, p_mod: usize, div: usize) -> (usize, usize) {
+    // use 128 bit values to avoid overflows
+    let (n, p_mod, div) = (n as u128, p_mod as u128, div as u128);
     // need + 5 for rounding
     let x = ((p_mod * n * 1000) / div + 5) / 10;
-    (x / p_mod, x % p_mod)
+    ((x / p_mod).try_into().unwrap(), (x % p_mod).try_into().unwrap())
 }
 
 #[inline(always)]
@@ -340,6 +350,15 @@ impl Freq {
         }
 
         self.check_args()?;
+
+        let mut out: LineWriter<Box<dyn Write>> = if let Some(ref output) = self.output {
+            LineWriter::new(Box::new(File::options()
+                .write(true)
+                .create_new(true)
+                .open(output)?))
+        } else {
+            LineWriter::new(Box::new(io::stdout().lock()))
+        };
 
         #[cfg(feature = "_regex")]
         let mut counter = if let Some(ref re) = self.regex {
@@ -455,7 +474,8 @@ impl Freq {
                 }
             }
 
-            println!("{}", f(index, count, sum, total, value.into()));
+            out.write_all(f(index, count, sum, total, value.into()).as_bytes())?;
+            out.write_all(b"\n")?;
         }
 
         Ok(0)

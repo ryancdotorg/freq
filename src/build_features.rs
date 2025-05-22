@@ -1,4 +1,4 @@
-include!(concat!(env!("OUT_DIR"),"/build_features.rs"));
+include!(concat!(env!("OUT_DIR"), "/build_features.rs"));
 
 build_info::build_info!(fn binfo);
 
@@ -7,7 +7,7 @@ pub fn get_long_version() -> &'static str {
     let mut output = String::from(LONG_VERSION);
 
     output.push_str(" (");
-    output.push_str(&info.target.triple);
+    output.push_str(TARGET);
     if PROFILE == "debug" {
         output.push_str(", debug");
     }
