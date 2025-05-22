@@ -7,7 +7,7 @@ pub struct Freq {
     output: Option<String>,
 
     #[cfg(feature = "_regex")]
-    #[arg(short = 'g', long, alias = "regexp", value_name = "REGEX", help = "Match regular expression (--regex-help for details)")]
+    #[arg(short = 'g', long, alias = "regexp", value_name = "REGEX", help = "Match regular expression")]
     regex: Option<String>,
 
     #[arg(short, long, value_parser = 0..=9, default_value = "3", value_name = "N", help = "Digits of precision")]
@@ -33,6 +33,9 @@ pub struct Freq {
 
     #[arg(short = 'F', long, conflicts_with = "reverse", help = "Do not sort by frequency")]
     no_freq_sort: bool,
+
+    #[arg(short = 'H', long, help = "Skip first line of each input file")]
+    skip_header: bool,
 
     #[arg(short, long, conflicts_with = "no_freq_sort", help = "Output least common values first")]
     reverse: bool,

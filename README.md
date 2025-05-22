@@ -24,7 +24,7 @@ Arguments:
 
 Options:
   -o, --output <FILE>      Write output to FILE [default: STDOUT]
-  -g, --regex <REGEX>      Match regular expression (--regex-help for details)
+  -g, --regex <REGEX>      Match regular expression
   -d, --digits <N>         Digits of precision [default: 3]
   -l, --limit <N>          Limit output to top N values
   -m, --min <N>            Limit output to values seen at least N times
@@ -33,6 +33,7 @@ Options:
   -L, --lexigraphic        Sort values with same frequency lexicographically
   -U, --unstable           Do not sort values with same frequency
   -F, --no-freq-sort       Do not sort by frequency
+  -H, --skip-header        Skip first line of each input file
   -r, --reverse            Output least common values first
   -u, --unique             Output unique values with no additional data
   -n, --number             Include line numbers
