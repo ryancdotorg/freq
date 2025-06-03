@@ -1,6 +1,9 @@
 [workspace]
 members = ["cargo:."]
 
+[dist.github-custom-runners]
+global = "ubuntu-latest"
+
 # Config for 'dist'
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
