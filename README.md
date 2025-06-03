@@ -48,6 +48,9 @@ Options:
 
 ## Examples
 
+If you find `freq` useful, please contribute more examples! Just open an
+issue.
+
 ### Word Count
 ```
 tr 'A-Z ' 'a-z\n' < 2600.txt.utf-8 | freq -l30 -g "^([a-z]+)[,.]*$"
@@ -114,6 +117,13 @@ freq -FUug '\S+\s+(\S+)\s+(?:\S+\s+){10}"([^"]+)"' /var/log/nginx/access.log | f
 ```
 
 ## Getting Started
+
+Pre-built binaries with the “standard” feature set for
+Linux (aarch64, armv7, x86_64),
+Windows (x86_64) and
+macOS (aarch64, x86_64)
+are available via
+[GitHub Releases](https://github.com/ryancdotorg/freq/releases),
 
 ### Dependencies
 

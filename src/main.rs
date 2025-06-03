@@ -16,7 +16,10 @@ use build_features::*;
 use std::process::exit;
 
 // packages
-use clap::{Command, CommandFactory};
+use clap::CommandFactory;
+
+#[cfg(feature = "color")]
+use clap::Command;
 
 #[cfg(feature = "color")]
 fn apply_styles(command: Command) -> Command {
