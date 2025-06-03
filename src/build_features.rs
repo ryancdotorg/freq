@@ -14,7 +14,7 @@ pub fn get_long_version() -> &'static str {
     output.push_str(")");
 
     output.push_str(build_info::format!(
-        "\nBuilt at {} with {}",
+        "\nBuilt: {} with {}",
         $.timestamp,
         $.compiler,
     ));

@@ -14,8 +14,6 @@ types, and also regular expression filtering/munging support.
 
 ## Usage
 
-TODO: better regex documentation
-
 ```
 Usage: freq [OPTIONS] [FILES]...
 
@@ -24,6 +22,7 @@ Arguments:
 
 Options:
   -o, --output <FILE>      Write output to FILE [default: STDOUT]
+  -f, --force              Allow overwriting existing files with -o or --output
   -g, --regex <REGEX>      Match regular expression
   -d, --digits <N>         Digits of precision [default: 3]
   -l, --limit <N>          Limit output to top N values
@@ -42,13 +41,12 @@ Options:
   -C, --no-cdf             Omit CDF column
   -t, --tsv                Tab delimited output
   -c, --csv                Comma seperated output
-  -h, --help               Print help
+  -h, --help               Print help (see more with '--help')
   -V, --version            Print version
   -V, --version [<RANGE>]  Print version or check against semver range and exit
-      --feature <FEATURE>  Check if compiled with feature and exit
 ```
 
-## Example Outputs
+## Examples
 
 ### Word Count
 ```

@@ -2,7 +2,7 @@
 mod input;
 
 mod command;
-use command::Freq;
+use command::{Freq, FreqArgs};
 
 #[cfg(feature = "egg")]
 mod egg;
@@ -16,36 +16,40 @@ use build_features::*;
 use std::process::exit;
 
 // packages
-//use clap::builder::styling::*;
-use clap::{CommandFactory, FromArgMatches};
+use clap::{Command, CommandFactory};
+
+#[cfg(feature = "color")]
+fn apply_styles(command: Command) -> Command {
+    use clap::builder::styling::*;
+
+    let styles = Styles::styled()
+        .header(AnsiColor::Green.on_default() | Effects::BOLD)
+        .usage(AnsiColor::Green.on_default() | Effects::BOLD)
+        .literal(AnsiColor::Cyan.on_default() | Effects::BOLD)
+        .placeholder(AnsiColor::Cyan.on_default())
+        .error(AnsiColor::Red.on_default() | Effects::BOLD)
+        .valid(AnsiColor::Cyan.on_default() | Effects::BOLD)
+        .invalid(AnsiColor::Yellow.on_default() | Effects::BOLD);
+
+    command.styles(styles)
+}
 
 fn main() {
-    /*
-    let styles = Styles::styled()
-        .header(AnsiColor::Yellow.on_default() | Effects::BOLD)
-        .usage(AnsiColor::Green.on_default() | Effects::BOLD)
-        .literal(AnsiColor::Green.on_default() | Effects::BOLD)
-        .placeholder(AnsiColor::Green.on_default() | Effects::BOLD);
-    */
-
-    let matches = Freq::command()
+    let command = FreqArgs::command()
         .disable_version_flag(true)
-        .long_version(get_long_version())
-        //.styles(styles)
-        .get_matches();
+        .long_version(get_long_version());
 
-    let mut freq = Freq::from_arg_matches(&matches).unwrap();
-    // HACK clap doesn't have a way to differentiate long vs short flags, so...
-    freq.long_version = !std::env::args()
-        .filter(|v| v == "--version")
-        .collect::<Vec<_>>()
-        .is_empty();
+    #[cfg(feature = "color")]
+    let command = apply_styles(command);
+
+    let freq = Freq::from_command(command).unwrap();
 
     match freq.exec() {
         Ok(exit_code) => exit(exit_code),
         Err(err) => {
-            eprintln!("{}", err);
-            exit(err.exit_code());
+            let exit_code = err.exit_code();
+            err.print();
+            exit(exit_code);
         },
     }
 }

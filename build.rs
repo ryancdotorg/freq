@@ -162,7 +162,7 @@ use clap::{CommandFactory, Parser};
 include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/args.rs"));
 
 fn man_page() -> io::Result<()> {
-    let cmd = Freq::command();
+    let cmd = FreqArgs::command();
     let man = clap_mangen::Man::new(cmd);
     let mut buffer: Vec<u8> = Default::default();
     man.render(&mut buffer)?;
@@ -195,7 +195,7 @@ fn readme() -> io::Result<()> {
         } else if state == 1 && line.starts_with("Usage: ") {
             state = 2;
             let mut skipping = true;
-            let mut cmd = Freq::command();
+            let mut cmd = FreqArgs::command();
             cmd.render_help()
                 .to_string()
                 .lines()

@@ -15,11 +15,9 @@ use std::fs::File;
 use std::io::{self, Write, LineWriter, BufRead};
 use std::mem::take;
 use std::num::{NonZeroUsize, NonZeroI32};
-use std::ops::Deref;
 
 // packages
-//use clap::builder::styling::*;
-use clap::{CommandFactory, Parser};
+use clap::{Command, FromArgMatches, Parser};
 use counter::Counter;
 use semver::{Version, VersionReq};
 
@@ -27,6 +25,8 @@ use semver::{Version, VersionReq};
 use regex::{Regex, Captures};
 #[cfg(feature = "regex-fancy")]
 use fancy_regex::{Regex, Captures};
+//#[cfg(all(feature = "regex-basic", feature = "regex-fancy"))]
+//use regex::{Regex as RegexBasic, Captures as CapturesBasic};
 
 include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/args.rs"));
 
@@ -43,7 +43,7 @@ fn re_captures<'a>(re: &'a Regex, s: &'a str) -> Option<Captures<'a>> {
 }
 
 #[cfg(feature = "_regex")]
-fn mk_apply_re(re: &Regex) -> Box<dyn Fn(usize, &str) -> Option<(OrderedString, usize)> + '_> {
+fn mk_apply_re(re: &Regex) -> Result<Box<dyn Fn(usize, &str) -> Option<(OrderedString, usize)> + '_>, FatalError> {
     use std::collections::HashSet;
     #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
     enum Group {
@@ -65,10 +65,15 @@ fn mk_apply_re(re: &Regex) -> Box<dyn Fn(usize, &str) -> Option<(OrderedString, 
     let mut list = data.into_iter().collect::<Vec<_>>();
     list.sort();
 
-//Ok(s) => f(index, &s).map(|(count, item)| (OrderedString::new(index, item), count)),
-    if has_n {
+    Ok(if has_n {
         if list.is_empty() {
-            panic!("no data capture");
+            return Err(FatalError::ClapUnfmt(
+                NonZeroI32::new(1).unwrap(),
+                clap::error::Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("Regex `{}` captures a count without a value", re),
+                )
+            ));
         }
 
         // return matched parts with count
@@ -114,7 +119,7 @@ fn mk_apply_re(re: &Regex) -> Box<dyn Fn(usize, &str) -> Option<(OrderedString, 
                 None
             }
         })
-    }
+    })
 }
 
 fn n_width(n: usize) -> usize {
@@ -191,57 +196,111 @@ fn pw_div(n: usize, div: usize) -> usize {
     ((n * 1000) / div + 5) / 10
 }
 
-#[derive(Debug)]
-pub struct FatalError(NonZeroI32, Box<dyn std::error::Error>);
-
-impl fmt::Display for FatalError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.1.fmt(f) }
+pub enum FatalError {
+    Misc(NonZeroI32, Box<dyn std::error::Error>),
+    ClapFmt(NonZeroI32, clap::error::Error),
+    ClapUnfmt(NonZeroI32, clap::error::Error),
 }
-
-const DEFAULT_ERROR_CODE: NonZeroI32 = NonZeroI32::new(255).unwrap();
 
 impl FatalError {
     #[allow(dead_code)]
     pub fn new<E: Into<Box<dyn std::error::Error>>>(code: i32, err: E) -> Self {
-        Self(code.try_into().unwrap_or(DEFAULT_ERROR_CODE), err.into())
+        Self::Misc(code.try_into().unwrap_or(DEFAULT_ERROR_CODE), err.into())
     }
 
     pub fn exit_code(&self) -> i32 {
-        self.0.get()
+        match self {
+            Self::Misc(code, _) => code.get(),
+            Self::ClapFmt(code, _) => code.get(),
+            Self::ClapUnfmt(code, _) => code.get(),
+        }
+    }
+
+    pub fn print(&self) {
+        match self {
+            Self::Misc(_, inner) => eprintln!("{}", inner),
+            Self::ClapFmt(_, inner) => { let _ = inner.print(); },
+            Self::ClapUnfmt(_, inner) => { let _ = inner.print(); },
+        }
+    }
+
+    pub fn format(self, command: &mut Command) -> Self {
+        match self {
+            Self::ClapUnfmt(code, inner) => Self::ClapFmt(code, inner.format(command)),
+            _ => self,
+        }
     }
 }
+
+const DEFAULT_ERROR_CODE: NonZeroI32 = NonZeroI32::new(255).unwrap();
 
 impl<E: Into<Box<dyn std::error::Error>>> From<E> for FatalError {
     fn from(e: E) -> Self {
-        Self(DEFAULT_ERROR_CODE, e.into())
+        Self::Misc(DEFAULT_ERROR_CODE, e.into())
     }
 }
 
-impl Deref for FatalError {
-    type Target = Box<dyn std::error::Error>;
+impl fmt::Display for FatalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Misc(_, inner) => fmt::Display::fmt(inner, f),
+            Self::ClapFmt(_, inner) => fmt::Display::fmt(inner, f),
+            Self::ClapUnfmt(_, inner) => fmt::Display::fmt(inner, f),
+        }
+    }
+}
 
-    fn deref(&self) -> &Self::Target {
-        &self.1
+impl fmt::Debug for FatalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Misc(_, inner) => fmt::Debug::fmt(inner, f),
+            Self::ClapFmt(_, inner) => fmt::Debug::fmt(inner, f),
+            Self::ClapUnfmt(_, inner) => fmt::Debug::fmt(inner, f),
+        }
     }
 }
 
 type CounterItem = (OrderedString, usize);
 type FnCmp = fn(&CounterItem, &CounterItem) -> std::cmp::Ordering;
 
+// wrapper around the args class
+#[derive(Debug)]
+pub(crate) struct Freq {
+    pub args: FreqArgs,
+    pub command: Command,
+    pub long_version: bool,
+}
+
 impl Freq {
+    pub fn from_command(command: Command) -> Result<Self, clap::error::Error> {
+        let matches = command.clone().get_matches();
+        let args = FreqArgs::from_arg_matches(&matches)?;
+
+        Ok(Self {
+            args,
+            command,
+            // HACK clap doesn't seem to have a way to differentiate long vs short flags...
+            long_version: std::env::args().any(|arg| arg == "--version"),
+        })
+    }
+
+    pub fn command(&self) -> Command {
+        self.command.clone()
+    }
+
     pub fn exec(mut self) -> Result<i32, FatalError> {
-        let version_result = match self.version {
+        let version_result = match self.args.version {
             Some(ref arg) => match arg {
                 Some(_) => Some((&self).check_version()?),
                 None => {
                     let output = if self.long_version {
                         format!(
                             "{} {}\n",
-                            Self::command().get_name(),
+                            self.command().get_name(),
                             get_long_version(),
                         )
                     } else {
-                        Self::command().render_version()
+                        self.command().render_version()
                     };
 
                     print!("{}", output);
@@ -252,7 +311,7 @@ impl Freq {
             None => None,
         };
 
-        let feature_result = match self.features {
+        let feature_result = match self.args.features {
             Some(ref features) => {
                 let missing = features.iter()
                     .map(|f| f.to_ascii_uppercase())
@@ -274,17 +333,18 @@ impl Freq {
 
         self.check_args()?;
 
-        let mut out: LineWriter<Box<dyn Write>> = if let Some(ref output) = self.output {
+        let mut out: LineWriter<Box<dyn Write>> = if let Some(ref output) = self.args.output {
             LineWriter::new(Box::new(File::options()
                 .write(true)
-                .create_new(true)
+                .create(self.args.force)
+                .create_new(!self.args.force)
                 .open(output)?))
         } else {
             LineWriter::new(Box::new(io::stdout().lock()))
         };
 
         #[cfg(feature = "_regex")]
-        let mut counter = if let Some(ref re) = self.regex {
+        let mut counter = if let Some(ref re) = self.args.regex {
             self.counter_regex(&Regex::new(re)?)?
         } else {
             self.counter()?
@@ -305,7 +365,7 @@ impl Freq {
         let mut items: Vec<CounterItem> = counter.drain().collect();
 
         // sort according to options
-        match (self.no_freq_sort, self.unstable) {
+        match (self.args.no_freq_sort, self.args.unstable) {
             (false, true) => { // sort by frequency only
                 items.sort_unstable_by(self.cmp_freq());
             },
@@ -321,31 +381,31 @@ impl Freq {
         let mut sum = 0;
         let most = items[0].1;
 
-        let digits = usize::try_from(self.digits).unwrap();
-        let lpad = !(self.tsv || self.csv);
+        let digits = usize::try_from(self.args.digits).unwrap();
+        let lpad = !(self.args.tsv || self.args.csv);
 
         let mut parts = Vec::<Box<dyn Fn(usize, usize, usize, usize) -> String>>::new();
 
         // number lines
-        if self.number {
+        if self.args.number {
             parts.push(mk_idx(max(6, 1 + n_width(distinct)), lpad));
         }
 
         parts.push(mk_cnt(max(7, 1 + n_width(most)), lpad));
 
         // running sum total
-        if self.sum {
+        if self.args.sum {
             let total = items.iter().fold(0, |accum, item| accum + item.1);
             parts.push(mk_run(max(7, 1 + n_width(total)), lpad));
         }
 
         // percent of total
-        if !self.no_pct {
+        if !self.args.no_pct {
             parts.push(mk_pct(digits, lpad));
         }
 
         // cumulative distribution function
-        if !self.no_cdf {
+        if !self.args.no_cdf {
             parts.push(mk_cdf(digits, lpad));
         }
 
@@ -354,9 +414,9 @@ impl Freq {
             move |i, c, r, t| parts.iter().map(|f| f(i, c, r, t)).collect::<Vec<String>>();
 
         // formatter (closures are, like, four layers deep at this point...)
-        let f: Box<dyn Fn(usize, usize, usize, usize, String) -> String> = if self.unique {
+        let f: Box<dyn Fn(usize, usize, usize, usize, String) -> String> = if self.args.unique {
             Box::new(move |_i, _c, _r, _t, v| v.to_string())
-        } else if self.csv {
+        } else if self.args.csv {
             // comma seperated
             Box::new(move |i, c, r, t, v| {
                 let esc = v
@@ -366,7 +426,7 @@ impl Freq {
 
                 format!("{},\"{}\"", format_parts(i, c, r, t).join(","), esc)
             })
-        } else if self.tsv {
+        } else if self.args.tsv {
             // tab delimited
             Box::new(move |i, c, r, t, v| format!("{}\t{}", format_parts(i, c, r, t).join("\t"), v))
         } else {
@@ -374,7 +434,7 @@ impl Freq {
             Box::new(move |i, c, r, t, v| format!("{}  {}", format_parts(i, c, r, t).join(""), v))
         };
 
-        let limit = self.limit.unwrap_or(usize::MAX);
+        let limit = self.args.limit.unwrap_or(usize::MAX);
 
         for (index, count, value) in items
             .into_iter()
@@ -385,13 +445,13 @@ impl Freq {
 
             sum += count;
 
-            if let Some(min) = self.min {
+            if let Some(min) = self.args.min {
                 if count < min {
                     continue;
                 }
             }
 
-            if let Some(max) = self.max {
+            if let Some(max) = self.args.max {
                 if count > max.into() {
                     continue;
                 }
@@ -405,7 +465,7 @@ impl Freq {
     }
 
     fn check_version(&self) -> Result<i32, FatalError> {
-        if let Some(semver) = self.version.as_ref().unwrap().as_ref() {
+        if let Some(semver) = self.args.version.as_ref().unwrap().as_ref() {
             let req = VersionReq::parse(semver)?;
             let ver = Version::parse(env!("CARGO_PKG_VERSION"))?;
             Ok(if req.matches(&ver) { 0 } else { 1 })
@@ -415,12 +475,15 @@ impl Freq {
     }
 
     fn check_args(&self) -> Result<(), FatalError> {
-        if let Some((min, max)) = self.min.zip(self.max) {
+        if let Some((min, max)) = self.args.min.zip(self.args.max) {
             if usize::from(max) < min {
-                return Err(Self::command().error(
-                    clap::error::ErrorKind::ArgumentConflict,
-                    "`max` can't be less than `min`",
-                ).into());
+                return Err(FatalError::ClapFmt(
+                    NonZeroI32::new(1).unwrap(),
+                    self.command().error(
+                        clap::error::ErrorKind::ValueValidation,
+                        "`max` can't be less than `min`",
+                    )
+                ));
             }
         }
 
@@ -429,9 +492,9 @@ impl Freq {
 
     fn inputs(&mut self) -> Result<Vec<Input>, FatalError> {
         // open input files, triggering i/o errors
-        let inputs = take(&mut self.files).into_iter()
+        let inputs = take(&mut self.args.files).into_iter()
             .map(|f| if f == "-" { None } else { Some(f) })
-            .chain(take(&mut self.files_raw).into_iter().map(Some))
+            .chain(take(&mut self.args.files_raw).into_iter().map(Some))
             .map(|f| match f {
                 Some(f) => match Input::path(&f) {
                     Ok(input) => Ok(input),
@@ -457,37 +520,21 @@ impl Freq {
 
     fn counter(&mut self) -> Result<Counter<OrderedString>, FatalError> {
         self.counter_call(&|i, s| Some((OrderedString::new(i, s.to_string()), 1usize)))
-        /*
-        let skip = if self.skip_header { 1 } else { 0 };
-        // run the counter over the lines
-        Ok(self.inputs()?
-            .into_iter()
-            .flat_map(|i| {
-                let label = i.get_label().to_string();
-                i.lines().enumerate().skip(skip).filter_map(move |(index, line)| {
-                    match line {
-                        Err(e) => {
-                            eprintln!("{}:{}:Error({}): {}", label, index, e.kind(), e,);
-                            None
-                        },
-                        Ok(s) => Some(OrderedString::new(index, s)),
-                    }
-                })
-            })
-            .collect::<Counter<_>>())
-            */
     }
 
     #[cfg(feature = "_regex")]
     fn counter_regex(&mut self, re: &Regex) -> Result<Counter<OrderedString>, FatalError> {
         // create closure to apply regular expression
-        let ref apply_re = mk_apply_re(re);
-        self.counter_call(apply_re)
+        let apply_re = mk_apply_re(re);
+        match apply_re {
+            Ok(ref apply_re) => self.counter_call(apply_re),
+            Err(e) => Err(e.format(&mut self.command())),
+        }
     }
 
     #[allow(dead_code)]
     fn counter_call<F: Fn(usize, &str) -> Option<(OrderedString, usize)>>(&mut self, f: &F) -> Result<Counter<OrderedString>, FatalError> {
-        let skip = if self.skip_header { 1 } else { 0 };
+        let skip = if self.args.skip_header { 1 } else { 0 };
         // run the counter over the lines
         Ok(self.inputs()?
             .into_iter()
@@ -514,7 +561,7 @@ impl Freq {
 
     fn cmp_freq(&self) -> FnCmp {
         // sort ascending or descending depending on flag
-        if self.reverse {
+        if self.args.reverse {
             |(_, a), (_, b)| a.cmp(b)
         } else {
             |(_, a), (_, b)| b.cmp(a)
@@ -523,7 +570,7 @@ impl Freq {
 
     fn cmp_str(&self) -> FnCmp {
         // sort by lexigraphic or insertion order depending on flag
-        if self.lexigraphic {
+        if self.args.lexigraphic {
             |(a, _), (b, _)| a.as_ref().cmp(b.as_ref())
         } else {
             |(a, _), (b, _)| a.cmp(b)
