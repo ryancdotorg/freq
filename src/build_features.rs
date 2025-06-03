@@ -11,7 +11,7 @@ pub fn get_long_version() -> &'static str {
     if PROFILE == "debug" {
         output.push_str(", debug");
     }
-    output.push_str(")");
+    output.push(')');
 
     output.push_str(build_info::format!(
         "\nBuilt: {} with {}",

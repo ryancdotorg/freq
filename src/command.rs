@@ -42,8 +42,11 @@ fn re_captures<'a>(re: &'a Regex, s: &'a str) -> Option<Captures<'a>> {
     re.captures(s).unwrap_or(None)
 }
 
+type FnApplyRe<'a> = Box<dyn Fn(usize, &str) -> Option<(OrderedString, usize)> + 'a>;
+
 #[cfg(feature = "_regex")]
-fn mk_apply_re(re: &Regex) -> Result<Box<dyn Fn(usize, &str) -> Option<(OrderedString, usize)> + '_>, FatalError> {
+//fn mk_apply_re(re: &Regex) -> Result<Box<dyn Fn(usize, &str) -> Option<(OrderedString, usize)> + '_>, FatalError> {
+fn mk_apply_re(re: &Regex) -> Result<FnApplyRe, FatalError> {
     use std::collections::HashSet;
     #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
     enum Group {
@@ -98,7 +101,7 @@ fn mk_apply_re(re: &Regex) -> Result<Box<dyn Fn(usize, &str) -> Option<(OrderedS
     } else if list.is_empty() {
         // return entire matched line
         Box::new(move |i: usize, s: &str| {
-            if let Some(_) = re_captures(re, s) {
+            if re_captures(re, s).is_some() {
                 Some((OrderedString::new(i, s.to_string()), 1usize))
             } else {
                 None
@@ -291,7 +294,7 @@ impl Freq {
     pub fn exec(mut self) -> Result<i32, FatalError> {
         let version_result = match self.args.version {
             Some(ref arg) => match arg {
-                Some(_) => Some((&self).check_version()?),
+                Some(_) => Some((self).check_version()?),
                 None => {
                     let output = if self.long_version {
                         format!(

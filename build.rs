@@ -11,7 +11,7 @@ fn maybe_write(path: impl AsRef<Path>, content: &[u8]) -> io::Result<bool> {
     // first, try to `stat` the file
     let should_write = if let Ok(metadata) = fs::metadata(&path) {
         // we could stat it, now check if it's the same size as our content
-        if content.len() as usize == metadata.len() as usize {
+        if content.len() == metadata.len() as usize {
             // size matches, so check whether the content is the same
             if let Ok(mut file) = File::open(&path) {
                 let mut data = Vec::<u8>::new();
@@ -37,7 +37,7 @@ fn maybe_write(path: impl AsRef<Path>, content: &[u8]) -> io::Result<bool> {
     if should_write {
         let file = File::create(&path).unwrap();
         let mut writer = BufWriter::new(file);
-        writer.write_all(&content)?;
+        writer.write_all(content)?;
         Ok(true)
     } else {
         Ok(false)
@@ -168,7 +168,7 @@ fn man_page() -> io::Result<()> {
     man.render(&mut buffer)?;
 
     let out_dir = env!("CARGO_MANIFEST_DIR");
-    let path = Path::new(&out_dir).join(&man.get_filename());
+    let path = Path::new(&out_dir).join(man.get_filename());
     maybe_write(&path, &buffer)?;
 
     Ok(())
@@ -178,7 +178,7 @@ fn readme() -> io::Result<()> {
     // slurp the existing readme
     let readme_path = concat!(env!("CARGO_MANIFEST_DIR"), "/README.md");
     let readme_str = {
-        let mut readme = File::open(&readme_path)?;
+        let mut readme = File::open(readme_path)?;
         let mut buf = Vec::<u8>::new();
         readme.read_to_end(&mut buf)?;
         String::from_utf8(buf).map_err(io::Error::other)?
@@ -211,14 +211,14 @@ fn readme() -> io::Result<()> {
     // ensure there's a trailing newline at the end of the file
     readme_new.push(String::from(""));
 
-    maybe_write(&readme_path, readme_new.join("\n").as_bytes())?;
+    maybe_write(readme_path, readme_new.join("\n").as_bytes())?;
 
     Ok(())
 }
 
 fn write_env(writer: &mut impl Write, var: &str) -> io::Result<()> {
     writer.write_all(format!(
-        "pub const {}: &'static str = {:?};\n",
+        "pub const {}: &str = {:?};\n",
         var, env::var(var).unwrap(),
     ).as_bytes())
 }
@@ -243,7 +243,7 @@ fn main() -> io::Result<()> {
     write_env(&mut content, "TARGET")?;
 
     content.write_all(format!(
-        "pub const LONG_VERSION: &'static str = {:?};\n",
+        "pub const LONG_VERSION: &str = {:?};\n",
         long_version(),
     ).as_bytes())?;
 
