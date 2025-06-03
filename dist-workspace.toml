@@ -4,6 +4,24 @@ members = ["cargo:."]
 [dist.github-custom-runners]
 global = "ubuntu-latest"
 
+[dist.github-custom-runners.aarch64-unknown-linux-gnu]
+runner = "ubuntu-latest"
+
+[dist.github-custom-runners.aarch64-unknown-linux-musl]
+runner = "ubuntu-latest"
+
+[dist.github-custom-runners.armv7-unknown-linux-gnueabihf]
+runner = "ubuntu-latest"
+
+[dist.github-custom-runners.armv7-unknown-linux-musleabihf]
+runner = "ubuntu-latest"
+
+[dist.github-custom-runners.x86_64-unknown-linux-gnu]
+runner = "ubuntu-latest"
+
+[dist.github-custom-runners.x86_64-unknown-linux-musl]
+runner = "ubuntu-latest"
+
 # Config for 'dist'
 [dist]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
