@@ -21,7 +21,7 @@ pub(crate) struct FreqArgs {
     #[arg(
         short = 'g', long, alias = "regexp", value_name = "REGEX",
         help = "Match regular expression",
-        long_help = "Match regular expression. With no capture groups, this will act as a filter. With a capture groups, the text within the capture groups is joined with tabs to become the value. Named capture groups are sorted lexically using the names as keys. Unnamed capture groups come after named capture groups.\n\nThe capture group named `n` is interpreted as the number of times a value appears, if used you will also need to capture a value. This is useful to reprocess previous output of `freq`.",
+        long_help = "Match regular expression. With no capture groups, this will act as a filter. With capture groups, the text within the capture groups is joined with tabs to become the value. Named capture groups are sorted lexically using the names as keys. Unnamed capture groups come after named capture groups.\n\nThe capture group named `n` is interpreted as the number of times a value appears. If used, you will also need to capture a value. This is useful to reprocess previous output of `freq`.",
     )]
     regex: Option<String>,
 
