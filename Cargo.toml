@@ -1,6 +1,6 @@
 [package]
 name = "freq"
-version = "0.9.0"
+version = "0.9.1"
 readme = "README.md"
 repository = "https://github.com/ryancdotorg/freq"
 description = "A command line tool for counting frequency of items and showing related statistics."
