@@ -7,16 +7,18 @@ use std::{
 
 use git2::{self, Repository, Commit};
 
-fn maybe_write(path: impl AsRef<Path>, content: &[u8]) -> io::Result<bool> {
+fn maybe_write(path: impl AsRef<Path>, content: impl AsRef<[u8]>) -> io::Result<bool> {
+    let content_bytes = content.as_ref();
+
     // first, try to `stat` the file
     let should_write = if let Ok(metadata) = fs::metadata(&path) {
         // we could stat it, now check if it's the same size as our content
-        if content.len() == metadata.len() as usize {
+        if content_bytes.len() == metadata.len() as usize {
             // size matches, so check whether the content is the same
             if let Ok(mut file) = File::open(&path) {
                 let mut data = Vec::<u8>::new();
                 if file.read_to_end(&mut data).is_ok() {
-                    data != content
+                    data != content_bytes
                 } else {
                     // failed to read the file
                     true
@@ -37,7 +39,7 @@ fn maybe_write(path: impl AsRef<Path>, content: &[u8]) -> io::Result<bool> {
     if should_write {
         let file = File::create(&path).unwrap();
         let mut writer = BufWriter::new(file);
-        writer.write_all(content)?;
+        writer.write_all(content_bytes)?;
         Ok(true)
     } else {
         Ok(false)
@@ -158,11 +160,16 @@ fn features() -> Vec<String> {
 }
 
 use std::num::NonZeroUsize;
-use clap::{CommandFactory, Parser};
+use clap::{Command, CommandFactory, Parser};
 include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/args.rs"));
 
+fn get_command() -> Command {
+    FreqArgs::command()
+        .disable_version_flag(true)
+}
+
 fn man_page() -> io::Result<()> {
-    let cmd = FreqArgs::command();
+    let cmd = get_command();
     let man = clap_mangen::Man::new(cmd);
     let mut buffer: Vec<u8> = Default::default();
     man.render(&mut buffer)?;
@@ -170,6 +177,16 @@ fn man_page() -> io::Result<()> {
     let out_dir = env!("CARGO_MANIFEST_DIR");
     let path = Path::new(&out_dir).join(man.get_filename());
     maybe_write(&path, &buffer)?;
+
+    Ok(())
+}
+
+fn markdown_help() -> io::Result<()> {
+    let cmd = get_command();
+    let markdown = clap_markdown::help_markdown_command(&cmd);
+    let out_dir = env!("CARGO_MANIFEST_DIR");
+    let path = Path::new(&out_dir).join("CommandLineHelp.md");
+    maybe_write(&path, markdown)?;
 
     Ok(())
 }
@@ -195,7 +212,7 @@ fn readme() -> io::Result<()> {
         } else if state == 1 && line.starts_with("Usage: ") {
             state = 2;
             let mut skipping = true;
-            let mut cmd = FreqArgs::command();
+            let mut cmd = get_command();
             cmd.render_help()
                 .to_string()
                 .lines()
@@ -211,7 +228,7 @@ fn readme() -> io::Result<()> {
     // ensure there's a trailing newline at the end of the file
     readme_new.push(String::from(""));
 
-    maybe_write(readme_path, readme_new.join("\n").as_bytes())?;
+    maybe_write(readme_path, readme_new.join("\n"))?;
 
     Ok(())
 }
@@ -232,6 +249,7 @@ fn main() -> io::Result<()> {
     }
 
     man_page()?;
+    markdown_help()?;
     readme()?;
 
     // generate a file with the code defining feature data

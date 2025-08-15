@@ -13,14 +13,14 @@ exclude = ["*.sh"]
 
 [dependencies]
 clap = { version = "4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
-counter = { version = "0.6" }
+counter = { version = "0.7" }
 build-info = "0"
 semver = "1"
 
 regex = { version = "1", optional = true }
-fancy-regex = { version = "0.14", optional = true }
+fancy-regex = { version = "0.16", optional = true }
 
-bzip2 = { version = "0.5", optional = true }
+bzip2 = { version = "0.6", optional = true }
 flate2 = { version = "1.0", optional = true }
 lz4_flex = { version = "0.11", optional = true }
 xz2 = { version = "0.1", optional = true }
@@ -30,7 +30,9 @@ zstd = { version = "0.13", optional = true }
 build-info = "0"
 build-info-build = "0"
 clap = { version = "4", features = ["derive"] }
-clap_mangen = "0.2.26"
+clap_mangen = "0.2"
+clap-markdown = "0.1.5"
+
 git2 = { version = "0.20.2", default-features = false }
 
 [features]

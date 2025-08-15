@@ -42,7 +42,6 @@ Options:
   -t, --tsv                Tab delimited output
   -c, --csv                Comma seperated output
   -h, --help               Print help (see more with '--help')
-  -V, --version            Print version
   -V, --version [<RANGE>]  Print version or check against semver range and exit
 ```
 
