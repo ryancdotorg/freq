@@ -54,8 +54,7 @@ impl Iterator for Decoder {
                 self.bit_pos += 1;
             }
 
-            if res.is_some() {
-                let symbol = *res.unwrap();
+            if let Some(&symbol) = res {
                 return if symbol == 255 {
                     None
                 } else {

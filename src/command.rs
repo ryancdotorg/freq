@@ -46,7 +46,7 @@ type FnApplyRe<'a> = Box<dyn Fn(usize, &str) -> Option<(OrderedString, usize)> +
 
 #[cfg(feature = "_regex")]
 //fn mk_apply_re(re: &Regex) -> Result<Box<dyn Fn(usize, &str) -> Option<(OrderedString, usize)> + '_>, FatalError> {
-fn mk_apply_re(re: &Regex) -> Result<FnApplyRe, FatalError> {
+fn mk_apply_re(re: &Regex) -> Result<FnApplyRe<'_>, FatalError> {
     use std::collections::HashSet;
     #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
     enum Group {
@@ -493,7 +493,7 @@ impl Freq {
         Ok(())
     }
 
-    fn inputs(&mut self) -> Result<Vec<Input>, FatalError> {
+    fn inputs(&mut self) -> Result<Vec<Input<'_>>, FatalError> {
         // open input files, triggering i/o errors
         let inputs = take(&mut self.args.files).into_iter()
             .map(|f| if f == "-" { None } else { Some(f) })
