@@ -1,8 +1,10 @@
 use std::{
     env,
     fs::{self, File},
-    io::{self, BufWriter, Write, Read},
-    path::Path,
+    // BufRead for Vec<u8>::lines()
+    io::{self, BufWriter, Write, Read, BufRead as _},
+    path::{Path, PathBuf},
+    process,
 };
 
 use git2::{self, Repository, Commit};
@@ -46,6 +48,23 @@ fn maybe_write(path: impl AsRef<Path>, content: impl AsRef<[u8]>) -> io::Result<
     }
 }
 
+fn package_list() -> Vec<PathBuf> {
+    let output = process::Command::new(env::var("CARGO").unwrap())
+        .args(["package", "--list", "--allow-dirty", "--color", "never"])
+        .output()
+        .expect("Failed to call `cargo`");
+
+    if output.status.success() {
+        // convert to PathBuf
+        output.stdout.lines()
+            .map_while(Result::ok)
+            .map(|f| f.into())
+            .collect()
+    } else {
+        vec![]
+    }
+}
+
 fn has_tag(repo: &Repository, tag_name: &str) -> bool {
     if let Ok(tag_names) = repo.tag_names(Some(tag_name)) {
         !tag_names.is_empty()
@@ -79,6 +98,24 @@ fn is_tag(repo: &Repository, commit: &Commit, tag_name: &str) -> bool {
     }).unwrap();
 
     !not_found
+}
+
+fn get_branch() -> Option<String> {
+    let repo = Repository::open(env!("CARGO_MANIFEST_DIR")).ok()?;
+    let head = repo.head().ok()?;
+
+    head.is_branch()
+        .then(|| head.shorthand())
+        .unwrap_or(None)
+        .map(|s| {
+            // lossy map into character set allowed for semver metadata
+            s.chars().map(|c| if c.is_ascii_alphanumeric() {
+                c
+            } else {
+                '-'
+            })
+            .collect()
+        })
 }
 
 fn long_version() -> String {
@@ -273,9 +310,35 @@ fn main() -> io::Result<()> {
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let path = Path::new(&out_dir).join("build_features.rs");
     maybe_write(&path, &content)?;
-
     // output file implicitly closed
-    //println!("cargo::rerun-if-changed=build.rs");
+
+    // HACK hacky change tracking
+    // NOTE build_info also does something similar
+
+    // outputs
+    #[allow(clippy::single_element_loop)]
+    for file in ["build_features.rs"] {
+        let path = Path::new(&out_dir).join(file);
+        let rel = path.strip_prefix(env!("CARGO_MANIFEST_DIR")).unwrap();
+        println!("cargo::rerun-if-changed={}", rel.display());
+    }
+
+    // git stuff
+    if let Some(branch) = get_branch() {
+        println!("cargo::rerun-if-changed=.git/refs/heads/{branch}");
+    }
+    println!("cargo::rerun-if-changed=.git/HEAD");
+    println!("cargo::rerun-if-changed=.git/index");
+
+    // package files (filtered)
+    package_list()
+        .into_iter()
+        .filter(|p| !p.to_string_lossy().ends_with(".md"))
+        .filter(|p| !p.to_string_lossy().starts_with("LICENSE"))
+        .filter(|p| !p.to_string_lossy().starts_with(".github/"))
+        .filter(|p| p.exists())
+        .filter_map(|p| p.into_os_string().into_string().ok())
+        .for_each(|filename| println!("cargo::rerun-if-changed={filename}"));
 
     Ok(())
 }
