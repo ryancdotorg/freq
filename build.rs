@@ -275,7 +275,7 @@ fn main() -> io::Result<()> {
     maybe_write(&path, &content)?;
 
     // output file implicitly closed
-    println!("cargo::rerun-if-changed=build.rs");
+    //println!("cargo::rerun-if-changed=build.rs");
 
     Ok(())
 }

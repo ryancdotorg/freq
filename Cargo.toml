@@ -10,6 +10,8 @@ authors = ["Ryan Castellucci <code@ryanc.org>"]
 edition = "2021"
 resolver = "2"
 exclude = ["*.sh"]
+# Trigger rebuilds after checkin/checkout
+include = [".git/index"]
 
 [dependencies]
 clap = { version = "4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
