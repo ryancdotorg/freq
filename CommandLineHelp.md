@@ -21,9 +21,9 @@ A command line tool for counting frequency of items and showing related statisti
 
 * `-o`, `--output <FILE>` — Write output to FILE. If this is not specified, output will be sent to STDOUT.
 * `-f`, `--force` — By default, when an output file is specified with `-o`, `freq` will not overwrite files that already exist. Pass `-f` to override this precaution.
-* `-g`, `--regex <REGEX>` — Match regular expression. With no capture groups, this will act as a filter. With a capture groups, the text within the capture groups is joined with tabs to become the value. Named capture groups are sorted lexically using the names as keys. Unnamed capture groups come after named capture groups.
+* `-g`, `--regex <REGEX>` — Match regular expression. With no capture groups, this will act as a filter. With capture groups, the text within the capture groups is joined with tabs to become the value. Named capture groups are sorted lexically using the names as keys. Unnamed capture groups come after named capture groups.
 
-   The capture group named `n` is interpreted as the number of times a value appears, if used you will also need to capture a value. This is useful to reprocess previous output of `freq`.
+   The capture group named `n` is interpreted as the number of times a value appears. If used, you will also need to capture a value. This is useful to reprocess previous output of `freq`.
 * `-d`, `--digits <N>` — Specify how many decimal places to use when printing percentages. Valid values are 0 to 9.
 
   Default value: `3`
