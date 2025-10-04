@@ -1,6 +1,6 @@
 [package]
 name = "freq"
-version = "0.9.2"
+version = "0.9.99"
 readme = "README.md"
 repository = "https://github.com/ryancdotorg/freq"
 description = "A command line tool for counting frequency of items and showing related statistics."
@@ -12,7 +12,7 @@ resolver = "2"
 exclude = ["*.sh"]
 
 [dependencies]
-clap = { version = "4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
+clap = { version = "4.5.47", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage", "wrap_help"] }
 counter = { version = "0.7" }
 build-info = "0"
 semver = "1"
@@ -29,6 +29,7 @@ zstd = { version = "0.13", optional = true }
 [build-dependencies]
 build-info = "0"
 build-info-build = "0"
+chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap_mangen = "0.2"
 clap-markdown = "0.1.5"

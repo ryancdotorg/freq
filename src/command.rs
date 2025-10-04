@@ -14,10 +14,10 @@ use std::fmt;
 use std::fs::File;
 use std::io::{self, Write, LineWriter, BufRead};
 use std::mem::take;
-use std::num::{NonZeroUsize, NonZeroI32};
+use std::num::NonZeroI32;
 
 // packages
-use clap::{Command, FromArgMatches, Parser};
+use clap::{Command, FromArgMatches};
 use counter::Counter;
 use semver::{Version, VersionReq};
 
@@ -28,7 +28,10 @@ use fancy_regex::{Regex, Captures};
 //#[cfg(all(feature = "regex-basic", feature = "regex-fancy"))]
 //use regex::{Regex as RegexBasic, Captures as CapturesBasic};
 
-include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/args.rs"));
+mod cli {
+    include!("cli.rs");
+}
+pub use cli::FreqArgs;
 
 #[cfg(all(feature = "regex-basic", not(feature = "regex-fancy")))]
 #[inline]

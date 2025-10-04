@@ -16,10 +16,8 @@ use build_features::*;
 use std::process::exit;
 
 // packages
-use clap::CommandFactory;
-
-#[cfg(feature = "color")]
-use clap::Command;
+use clap::{Command, CommandFactory};
+use clap::builder::StyledStr;
 
 #[cfg(feature = "color")]
 fn apply_styles(command: Command) -> Command {
@@ -37,13 +35,47 @@ fn apply_styles(command: Command) -> Command {
     command.styles(styles)
 }
 
+#[cfg(not(feature = "color"))]
+fn apply_styles(command: Command) -> Command {
+    command
+}
+
+fn apply_before_help(command: Command) -> Command {
+    let mut styled = StyledStr::new();
+
+    let before = format!(
+        "{} {}\n{}\n{}\n",
+        command.get_name(),
+        command.get_version().unwrap(),
+        env!("CARGO_PKG_AUTHORS"),
+        env!("CARGO_PKG_REPOSITORY"),
+    );
+    styled.push_str(&before);
+
+    command.before_help(styled)
+}
+
+fn apply_after_help(command: Command) -> Command {
+    #[allow(unused_imports)]
+    use clap::builder::styling::*;
+
+    let mut styled = StyledStr::new();
+    let styles = command.get_styles();
+    let header = styles.get_header();
+//    let part = format!("{header}{}{header:#}", "hello");
+//    styled.push_str(&part);
+
+    command.after_help(styled)
+}
+
 fn main() {
     let command = FreqArgs::command()
         .disable_version_flag(true)
         .long_version(get_long_version());
 
-    #[cfg(feature = "color")]
     let command = apply_styles(command);
+    let command = apply_before_help(command);
+    let command = apply_after_help(command);
 
     let freq = Freq::from_command(command).unwrap();
 

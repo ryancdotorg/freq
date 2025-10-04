@@ -1,69 +1,42 @@
 use std::{
-    env,
+    env, fmt,
     fs::{self, File},
-    // BufRead for Vec<u8>::lines()
-    io::{self, BufWriter, Write, Read, BufRead as _},
+    io::{self, BufWriter, Write, Read},
     path::{Path, PathBuf},
-    process,
+    sync::OnceLock,
 };
 
+use chrono::{DateTime, Utc};
 use git2::{self, Repository, Commit};
 
 fn maybe_write(path: impl AsRef<Path>, content: impl AsRef<[u8]>) -> io::Result<bool> {
-    let content_bytes = content.as_ref();
+    let content = content.as_ref();
 
-    // first, try to `stat` the file
-    let should_write = if let Ok(metadata) = fs::metadata(&path) {
-        // we could stat it, now check if it's the same size as our content
-        if content_bytes.len() == metadata.len() as usize {
-            // size matches, so check whether the content is the same
-            if let Ok(mut file) = File::open(&path) {
-                let mut data = Vec::<u8>::new();
-                if file.read_to_end(&mut data).is_ok() {
-                    data != content_bytes
-                } else {
-                    // failed to read the file
-                    true
-                }
-            } else {
-                // failed to open the file
-                true
-            }
-        } else {
-            // size of the file differs
-            true
-        }
-    } else {
-        // couldn't stat the file, maybe it doesn't exist?
-        true
+    // Check if we need to write the file by comparing with existing content
+    let should_write = match fs::metadata(&path) {
+        // File doesn't exist or can't be accessed - write it
+        Err(_) => true,
+
+        // File exists, check if size matches
+        Ok(metadata) if content.len() != metadata.len() as usize => true,
+
+        // Size matches, compare content, assume we should write if read fails
+        Ok(_) => fs::read(&path).map_or(true, |existing| existing != content),
     };
 
     if should_write {
-        let file = File::create(&path).unwrap();
+        let file = File::create(&path)?;
         let mut writer = BufWriter::new(file);
-        writer.write_all(content_bytes)?;
+        writer.write_all(content)?;
         Ok(true)
     } else {
         Ok(false)
     }
 }
 
-fn package_list() -> Vec<PathBuf> {
-    let output = process::Command::new(env::var("CARGO").unwrap())
-        .args(["package", "--list", "--allow-dirty", "--color", "never"])
-        .output()
-        .expect("Failed to call `cargo`");
-
-    if output.status.success() {
-        // convert to PathBuf
-        output.stdout.lines()
-            .map_while(Result::ok)
-            .map(|f| f.into())
-            .collect()
-    } else {
-        vec![]
-    }
-}
+//
+// GIT HELPERS
+//
 
 fn has_tag(repo: &Repository, tag_name: &str) -> bool {
     if let Ok(tag_names) = repo.tag_names(Some(tag_name)) {
@@ -71,6 +44,80 @@ fn has_tag(repo: &Repository, tag_name: &str) -> bool {
     } else {
         false
     }
+}
+
+fn err_git2<T: fmt::Display>(e: T) -> git2::Error {
+    git2::Error::from_str(&e.to_string())
+}
+
+struct RepoWalker<'a> {
+    repo: &'a Repository,
+    stack: Vec<fs::ReadDir>,
+}
+
+impl<'a> RepoWalker<'a> {
+    fn new(repo: &'a Repository) -> Result<Self, git2::Error> {
+        let root = repo.path().parent().unwrap_or(repo.path()).to_path_buf();
+        let dir = fs::read_dir(&root).map_err(err_git2)?;
+        let stack = vec![dir];
+        Ok(RepoWalker { repo, stack })
+    }
+}
+
+impl<'a> Iterator for RepoWalker<'a> {
+    type Item = Result<PathBuf, git2::Error>;
+
+    // Recursively iterate over all the files in the repo, skipping over any
+    // which are excluded by .gitignore rules.
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(entries) = self.stack.last_mut() {
+            let Some(entry) = entries.next() else {
+                self.stack.pop();
+                continue;
+            };
+
+            let path = match entry {
+                Err(e) => return Some(Err(err_git2(e))),
+                Ok(v) => v.path(),
+            };
+
+            let is_ignored = match self.repo.is_path_ignored(&path) {
+                Err(e) => return Some(Err(e)),
+                Ok(v) => v,
+            };
+
+            if is_ignored {
+                continue;
+            }
+
+            if !path.is_dir() {
+                return Some(Ok(path.to_owned()));
+            }
+
+            match fs::read_dir(&path) {
+                Err(e) => return Some(Err(err_git2(e))),
+                Ok(dir) => self.stack.push(dir),
+            }
+        }
+
+        None
+    }
+}
+
+fn latest_change(repo: &Repository) -> Result<Option<DateTime<Utc>>, git2::Error> {
+    Ok(RepoWalker::new(repo)?
+        .filter_map(|entry| {
+            let path = entry.ok()?;
+            let metadata = path.metadata().ok()?;
+            let mtime = metadata.modified().ok()?;
+            Some(mtime)
+        })
+        .fold(None, |acc, mtime| match acc {
+            None => Some(mtime),
+            Some(acc) if mtime > acc => Some(mtime),
+            Some(acc) => Some(acc),
+        })
+        .map(|mtime| mtime.into()))
 }
 
 fn is_dirty(repo: &Repository) -> bool {
@@ -104,18 +151,72 @@ fn get_branch() -> Option<String> {
     let repo = Repository::open(env!("CARGO_MANIFEST_DIR")).ok()?;
     let head = repo.head().ok()?;
 
-    head.is_branch()
-        .then(|| head.shorthand())
-        .unwrap_or(None)
+    if head.is_branch() { head.shorthand() } else { None }
+        .map(clean_semver_ident)
+}
+
+//
+// VERSION HELPERS
+//
+
+static DIRTY_COUNT: OnceLock<u64> = OnceLock::new();
+
+/// Get and update the dirty build count for the current commit
+fn dirty_count(commit: &str) -> io::Result<u64> {
+    if let Some(count) = DIRTY_COUNT.get() {
+        return Ok(*count);
+    }
+
+    // build path to tracking file
+    let file = concat!(env!("CARGO_MANIFEST_DIR"), "/.dirty-build");
+
+    // read and parse previous count data, empty vec on error
+    let parts = fs::read(file)
+        .map(|s| String::from_utf8_lossy(&s).to_string())
         .map(|s| {
-            // lossy map into character set allowed for semver metadata
-            s.chars().map(|c| if c.is_ascii_alphanumeric() {
-                c
-            } else {
-                '-'
-            })
-            .collect()
+            s.trim_ascii()
+                .split_ascii_whitespace()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
         })
+        .unwrap_or_default();
+
+    // calculate new count - if file was valid and commit matches, increment
+    // count, otherwise start from 0
+    let count = if parts.len() == 2 {
+        if parts[0] == commit {
+            parts[1].parse().map(|v: u64| v + 1).unwrap_or(0)
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    let count = DIRTY_COUNT.get_or_init(|| count);
+
+    // update the tracking file
+    fs::write(file, format!("{} {}\n", commit, count))?;
+
+    Ok(*count)
+}
+
+fn clean_semver_ident(buildmeta: &str) -> String {
+    // From the Semantic Versioning 2.0.0 spec:
+    //
+    // > Build metadata MAY be denoted by appending a plus sign and a series of dot separated
+    // > identifiers immediately following the patch or pre-release version. Identifiers MUST
+    // > comprise only ASCII alphanumerics and hyphens [0-9A-Za-z-]. Identifiers MUST NOT be
+    // > empty.
+    //
+    // For now, we just replace disallowed characters with '-'.
+    buildmeta
+        .chars()
+        .map(|c| match c {
+            '0'..='9' | 'A'..='Z' | 'a'..='z' | '-' => c,
+            _ => '-',
+        })
+        .collect()
 }
 
 fn long_version() -> String {
@@ -153,6 +254,9 @@ fn long_version() -> String {
 
             if dirty {
                 long_version.push_str("-dirty");
+                if let Ok(count) = dirty_count(&commit.id().to_string()) {
+                    long_version.push_str(&count.to_string());
+                }
             }
         }
     }
@@ -196,9 +300,12 @@ fn features() -> Vec<String> {
     features
 }
 
-use std::num::NonZeroUsize;
-use clap::{Command, CommandFactory, Parser};
-include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/args.rs"));
+use clap::{Command, CommandFactory};
+
+mod cli {
+    include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/cli.rs"));
+}
+use cli::FreqArgs;
 
 fn get_command() -> Command {
     FreqArgs::command()
@@ -272,8 +379,18 @@ fn readme() -> io::Result<()> {
 
 fn write_env(writer: &mut impl Write, var: &str) -> io::Result<()> {
     writer.write_all(format!(
-        "pub const {}: &str = {:?};\n",
+        "#[allow(dead_code)]\npub const {}: &str = {:?};\n",
         var, env::var(var).unwrap(),
+    ).as_bytes())
+}
+
+fn write_const_opt_str<K>(writer: &mut impl Write, name: K, value: Option<&str>) -> io::Result<()>
+where
+    K: fmt::Display,
+{
+    writer.write_all(format!(
+        "#[allow(dead_code)]\npub const {}: Option<&str> = {:?};\n",
+        name, value,
     ).as_bytes())
 }
 
@@ -297,6 +414,19 @@ fn main() -> io::Result<()> {
     // target triple, e.g. "x86_64-unknown-linux-gnu"
     write_env(&mut content, "TARGET")?;
 
+    let mtime = if let Ok(repo) = Repository::open(env!("CARGO_MANIFEST_DIR")) {
+        latest_change(&repo).ok().flatten()
+    } else {
+        None
+    };
+
+    if let Some(mtime) = mtime {
+        let mtime_str = mtime.format("%Y%m%dT%H%M%SZ").to_string();
+        write_const_opt_str(&mut content, "MODIFIED", Some(&mtime_str))?;
+    } else {
+        write_const_opt_str(&mut content, "MODIFIED", None)?;
+    }
+
     content.write_all(format!(
         "pub const LONG_VERSION: &str = {:?};\n",
         long_version(),
@@ -312,33 +442,17 @@ fn main() -> io::Result<()> {
     maybe_write(&path, &content)?;
     // output file implicitly closed
 
-    // HACK hacky change tracking
-    // NOTE build_info also does something similar
-
-    // outputs
-    #[allow(clippy::single_element_loop)]
-    for file in ["build_features.rs"] {
-        let path = Path::new(&out_dir).join(file);
-        let rel = path.strip_prefix(env!("CARGO_MANIFEST_DIR")).unwrap();
-        println!("cargo::rerun-if-changed={}", rel.display());
+    if let Some(mtime) = mtime {
+        if let Ok(file) = std::fs::File::open(path) {
+            // prevent `build_features.rs` from triggering a rebuild
+            file.set_modified(mtime.into())?;
+        }
     }
 
     // git stuff
     if let Some(branch) = get_branch() {
         println!("cargo::rerun-if-changed=.git/refs/heads/{branch}");
     }
-    println!("cargo::rerun-if-changed=.git/HEAD");
-    println!("cargo::rerun-if-changed=.git/index");
-
-    // package files (filtered)
-    package_list()
-        .into_iter()
-        .filter(|p| !p.to_string_lossy().ends_with(".md"))
-        .filter(|p| !p.to_string_lossy().starts_with("LICENSE"))
-        .filter(|p| !p.to_string_lossy().starts_with(".github/"))
-        .filter(|p| p.exists())
-        .filter_map(|p| p.into_os_string().into_string().ok())
-        .for_each(|filename| println!("cargo::rerun-if-changed={filename}"));
 
     Ok(())
 }
